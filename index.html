@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antheara Live Ops — ระบบจัดการทีมไลฟ์</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f9fafc;
+    --card:#ffffff;
+    --text:#1a2032;
+    --text-sub:#5c6478;
+    --accent:#44271F;
+    --accent-hover:#705540;
+    --accent-soft:#F7EFE7;
+    --border:#e7eaf1;
+    --success:#16a34a;
+    --warn:#d97706;
+    --danger:#dc2626;
+    --tiktok:#000000;
+    --shopee:#ee4d2d;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Anuphan","Segoe UI",sans-serif;background:var(--bg);color:var(--text);}
+  h1,h2,h3,.display{font-family:"Bai Jamjuree","Anuphan",sans-serif;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select{font-family:inherit;}
+
+  /* ===== LOGIN ===== */
+  #login-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,var(--accent) 0%,var(--accent-hover) 100%);
+    padding:24px;
+  }
+  .login-card{
+    background:var(--card);border-radius:16px;padding:40px 36px;width:100%;max-width:360px;
+    box-shadow:0 20px 50px rgba(0,0,0,.25);text-align:center;
+  }
+  .login-card .brand{font-size:26px;font-weight:600;color:var(--accent);margin-bottom:4px;}
+  .login-card .sub{color:var(--text-sub);font-size:13.5px;margin-bottom:28px;}
+  .login-card input{
+    width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;
+    font-size:20px;text-align:center;letter-spacing:.3em;margin-bottom:14px;
+  }
+  .login-card input:focus{outline:none;border-color:var(--accent);}
+  .login-card button{
+    width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);
+    color:#fff;font-size:15px;font-weight:600;transition:background .15s;
+  }
+  .login-card button:hover{background:var(--accent-hover);}
+  .login-error{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px;}
+  .login-hint{margin-top:22px;font-size:12px;color:var(--text-sub);background:var(--accent-soft);border-radius:8px;padding:10px 12px;text-align:left;line-height:1.7;}
+
+  /* ===== APP SHELL ===== */
+  #app-shell{display:none;min-height:100vh;}
+  #app-shell.active{display:flex;}
+  .sidebar{
+    width:230px;flex:0 0 230px;background:#fff;border-right:1px solid var(--border);
+    min-height:100vh;padding:20px 14px;position:sticky;top:0;align-self:flex-start;
+    transition:transform .2s;
+  }
+  .sidebar .logo{padding:6px 10px 20px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+  .sidebar .logo b{font-size:18px;color:var(--accent);display:block;}
+  .sidebar .logo span{font-size:11.5px;color:var(--text-sub);}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;
+    color:var(--text-sub);font-size:14px;font-weight:500;cursor:pointer;margin-bottom:3px;
+    border:none;background:none;width:100%;text-align:left;
+  }
+  .nav-item:hover{background:var(--accent-soft);}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+  .nav-item .icon{font-size:16px;width:20px;text-align:center;}
+  .nav-divider{border-top:1px solid var(--border);margin:12px 4px;}
+  .sidebar-foot{margin-top:16px;padding:12px;background:var(--bg);border-radius:10px;font-size:12.5px;}
+  .sidebar-foot .name{font-weight:700;color:var(--text);}
+  .sidebar-foot .logout{color:var(--danger);cursor:pointer;font-weight:600;margin-top:6px;display:inline-block;}
+
+  .main{flex:1;min-width:0;}
+  .topbar{
+    height:60px;background:#fff;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;padding:0 26px;
+    position:sticky;top:0;z-index:5;
+  }
+  .topbar h1{font-size:18px;margin:0;}
+  .topbar .menu-btn{display:none;background:none;border:none;font-size:20px;}
+  .badge-role{
+    font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);
+  }
+  .content{padding:26px;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(26,32,50,.04);}
+  .card + .card{margin-top:16px;}
+  .grid{display:grid;gap:16px;}
+  .grid.cols-3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));}
+  .stat-label{font-size:13px;color:var(--text-sub);margin-bottom:6px;}
+  .stat-value{font-size:24px;font-weight:700;font-family:"Bai Jamjuree";}
+
+  .chip{display:inline-block;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:600;}
+  .chip.tiktok{background:#000;color:#fff;}
+  .chip.shopee{background:var(--shopee);color:#fff;}
+  .chip.owner{background:var(--accent-soft);color:var(--accent);}
+  .chip.full{background:#e7f6ec;color:var(--success);}
+  .chip.part{background:#fdf1e0;color:var(--warn);}
+
+  table{width:100%;border-collapse:collapse;}
+  th,td{padding:12px 14px;text-align:left;font-size:14px;border-bottom:1px solid var(--border);}
+  th{color:var(--text-sub);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;}
+  .btn{
+    border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;
+    background:var(--accent);color:#fff;
+  }
+  .btn:hover{background:var(--accent-hover);}
+  .btn.ghost{background:none;border:1px solid var(--border);color:var(--text);}
+  .btn.ghost:hover{background:var(--bg);}
+  .btn.sm{padding:6px 12px;font-size:12.5px;}
+
+  .placeholder{
+    text-align:center;padding:60px 20px;color:var(--text-sub);
+  }
+  .placeholder .icon{font-size:38px;margin-bottom:14px;display:block;}
+  .placeholder h3{color:var(--text);margin-bottom:6px;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(26,32,50,.45);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:20px;
+  }
+  .modal-overlay.active{display:flex;}
+  .modal{background:#fff;border-radius:14px;padding:26px;width:100%;max-width:400px;}
+  .modal h3{margin:0 0 18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--text-sub);margin-bottom:5px;font-weight:600;}
+  .field input,.field select{
+    width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;
+  }
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent);}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+
+  .status-chip{display:inline-block;font-size:11.5px;padding:4px 11px;border-radius:999px;font-weight:600;}
+  .status-chip.scheduled{background:#eef1f6;color:var(--text-sub);}
+  .status-chip.live{background:#fdecec;color:var(--danger);}
+  .status-chip.done{background:#e7f6ec;color:var(--success);}
+  .session-card{border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:12px;}
+  .session-card .top-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;}
+  .session-card .meta{font-size:13px;color:var(--text-sub);}
+  .session-photos{display:flex;gap:10px;margin-top:12px;}
+  .session-photos .ph{text-align:center;font-size:11px;color:var(--text-sub);}
+  .session-photos img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:4px;}
+  .order-row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);font-size:14px;}
+  .order-row:last-child{border-bottom:none;}
+  .total-banner{background:var(--accent-soft);border-radius:10px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .total-banner .amt{font-family:"Bai Jamjuree";font-size:24px;font-weight:700;color:var(--accent);}
+  .empty-note{text-align:center;padding:50px 20px;color:var(--text-sub);}
+  .empty-note .icon{font-size:34px;display:block;margin-bottom:12px;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+  .tab-bar{display:flex;gap:8px;margin-bottom:18px;}
+  .tab-btn{border:1px solid var(--border);background:#fff;color:var(--text-sub);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:600;}
+  .tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .summary-layout{display:grid;grid-template-columns:260px 1fr;gap:18px;align-items:start;}
+  .summary-list{padding:10px;}
+  .summary-row{padding:12px 14px;border-radius:10px;cursor:pointer;margin-bottom:4px;}
+  .summary-row:hover{background:var(--bg);}
+  .summary-row.active{background:var(--accent-soft);}
+  .summary-row .d{font-weight:600;font-size:13.5px;}
+  .summary-row .m{font-size:12px;color:var(--text-sub);margin-top:2px;}
+
+  @media (max-width:760px){
+    .summary-layout{grid-template-columns:1fr;}
+  }
+
+  #toast-stack{
+    position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100;
+    display:flex;flex-direction:column;gap:10px;align-items:center;width:100%;padding:0 16px;
+  }
+  .toast{
+    background:var(--text);color:#fff;padding:13px 20px;border-radius:10px;font-size:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:420px;text-align:center;white-space:pre-line;
+    animation:toast-in .18s ease-out;
+  }
+  .toast.error{background:var(--danger);}
+  .toast.success{background:var(--success);}
+  .toast.warn{background:var(--warn);}
+  @keyframes toast-in{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:translateY(0);}}
+
+  @media (max-width:860px){
+    .sidebar{
+      position:fixed;left:0;top:0;bottom:0;z-index:20;transform:translateX(-100%);
+      box-shadow:0 0 30px rgba(0,0,0,.2);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .topbar .menu-btn{display:block;}
+  }
+</style>
+</head>
+<body>
+
+  <div id="toast-stack"></div>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="brand">Antheara</div>
+      <div class="sub">Live Ops — ระบบจัดการทีมไลฟ์</div>
+      <input id="pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="••••">
+      <button onclick="attemptLogin()">เข้าสู่ระบบ</button>
+      <div class="login-error" id="login-error"></div>
+      <div class="login-hint">
+        รหัสทดลองใช้ (ลบออกได้ทีหลัง):<br>
+        เจ้าของ: <b>0000</b> · พนักงาน TikTok: <b>1111</b> · พนักงาน Shopee: <b>2222</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app-shell">
+    <div class="sidebar" id="sidebar">
+      <div class="logo"><b>Antheara</b><span>Live Ops</span></div>
+      <div id="nav-list"></div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+          <h1 id="page-title">แดชบอร์ดรวม</h1>
+        </div>
+        <span class="badge-role" id="role-badge"></span>
+      </div>
+      <div class="content" id="page-content"></div>
+    </div>
+  </div>
+
+  <!-- EMPLOYEE MODAL -->
+  <div class="modal-overlay" id="emp-modal">
+    <div class="modal">
+      <h3 id="emp-modal-title">เพิ่มพนักงาน</h3>
+      <input type="hidden" id="emp-id">
+      <div class="field"><label>ชื่อ</label><input id="emp-name"></div>
+      <div class="field"><label>รหัส PIN</label><input id="emp-code" maxlength="6"></div>
+      <div class="field"><label>บทบาท</label>
+        <select id="emp-role" onchange="toggleEmpFields()">
+          <option value="staff">พนักงาน</option>
+          <option value="owner">เจ้าของ</option>
+        </select>
+      </div>
+      <div id="emp-staff-fields">
+        <div class="field"><label>แพลตฟอร์ม</label>
+          <select id="emp-platform">
+            <option value="tiktok">TikTok</option>
+            <option value="shopee">Shopee</option>
+          </select>
+        </div>
+        <div class="field"><label>ประเภทงาน</label>
+          <select id="emp-employment" onchange="toggleSalaryField()">
+            <option value="full-time">พนักงานประจำ</option>
+            <option value="part-time">พาร์ทไทม์</option>
+          </select>
+        </div>
+        <div class="field" id="emp-salary-field"><label>เงินเดือนฐาน (บาท)</label><input id="emp-salary" type="number"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeEmpModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveEmployee()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SESSION MODAL -->
+  <div class="modal-overlay" id="session-modal">
+    <div class="modal">
+      <h3>นัดหมายไลฟ์ใหม่</h3>
+      <div class="field" id="session-employee-field">
+        <label>พนักงาน</label>
+        <select id="session-employee"></select>
+      </div>
+      <div class="field"><label>วันที่</label><input id="session-date" type="date"></div>
+      <div class="field"><label>เวลาเริ่ม</label><input id="session-start" type="time"></div>
+      <div class="field"><label>เวลาจบ</label><input id="session-end" type="time"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeSessionModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveSession()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRODUCT MODAL -->
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal">
+      <h3 id="product-modal-title">เพิ่มสินค้า</h3>
+      <input type="hidden" id="product-id">
+      <div class="field"><label>ชื่อสินค้า</label><input id="product-name"></div>
+      <div class="field"><label>ราคา (บาท)</label><input id="product-price" type="number" min="0"></div>
+      <div class="field"><label>จำนวนคงเหลือ</label><input id="product-stock" type="number" min="0"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeProductModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveProduct()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- hidden file inputs for photo capture -->
+  <input type="file" id="checkin-file-input" accept="image/*" capture="user" style="display:none" onchange="handleCheckInFile(event)">
+  <input type="file" id="endlive-file-input" accept="image/*" style="display:none" onchange="handleEndLiveFile(event)">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  function showToast(message, type){
+    const stack = document.getElementById("toast-stack");
+    const el = document.createElement("div");
+    el.className = "toast" + (type ? " " + type : "");
+    el.textContent = message;
+    stack.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  // ===== Supabase data layer =====
+  // anon key is meant to be public in client-side code — access is controlled by
+  // RLS policies on the Supabase side (see supabase-schema.sql), same trust model
+  // the app already had with the plaintext PIN login.
+  const SUPABASE_URL = "https://dlxszrpiwomjfniqbnpe.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRseHN6cnBpd29tamZuaXFibnBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDgzMTcsImV4cCI6MjA5OTMyNDMxN30.INpHHMeERE5U_0y28zjF9o7LC2NS70IaIbK98-XB5n8";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const SESSION_KEY = "liveTeamOpsSessionCode";
+
+  let data = { employees: [], commissionTiers: [], liveSessions: [], products: [], orders: [] };
+  let currentEmployee = null;
+
+  function mapEmployee(r){ return {id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform, employmentType:r.employment_type, baseSalary:r.base_salary}; }
+  function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
+  function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty}; }
+  function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time}; }
+  function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at}; }
+
+  async function refreshAllData(){
+    const [emp, tiers, sessions, products, orders] = await Promise.all([
+      sb.from("employees").select("*").order("id"),
+      sb.from("commission_tiers").select("*").order("sort_order"),
+      sb.from("live_sessions").select("*").order("id"),
+      sb.from("products").select("*").order("id"),
+      sb.from("orders").select("*").order("id")
+    ]);
+    if(emp.error) throw emp.error;
+    data.employees = (emp.data || []).map(mapEmployee);
+    data.commissionTiers = (tiers.data || []).map(mapTier);
+    data.liveSessions = (sessions.data || []).map(mapSession);
+    data.products = (products.data || []).map(mapProduct);
+    data.orders = (orders.data || []).map(mapOrder);
+  }
+
+  const MENUS = [
+    {id:"dashboard", icon:"📊", label:"แดชบอร์ดรวม", roles:["owner","staff"]},
+    {id:"live-schedule", icon:"🎥", label:"ตารางไลฟ์", roles:["owner","staff"]},
+    {id:"sales-entry", icon:"🛒", label:"บันทึกยอดขาย", roles:["owner","staff"]},
+    {id:"live-summary", icon:"📋", label:"สรุปผลไลฟ์", roles:["owner","staff"]},
+    {id:"stock", icon:"📦", label:"สต๊อกสินค้า", roles:["owner","staff"]},
+    {id:"payroll", icon:"💰", label:"เงินเดือน & ค่าคอม", roles:["owner"]},
+    {id:"employees", icon:"👥", label:"จัดการพนักงาน", roles:["owner"]}
+  ];
+
+  let currentPage = "dashboard";
+
+  async function attemptLogin(){
+    const code = document.getElementById("pin-input").value.trim();
+    const btn = document.querySelector("#login-screen button");
+    btn.disabled = true; btn.textContent = "กำลังตรวจสอบ...";
+    try {
+      await refreshAllData();
+    } catch(err){
+      document.getElementById("login-error").textContent = "เชื่อมต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง";
+      btn.disabled = false; btn.textContent = "เข้าสู่ระบบ";
+      return;
+    }
+    const emp = data.employees.find(e => e.code === code);
+    btn.disabled = false; btn.textContent = "เข้าสู่ระบบ";
+    if(!emp){
+      document.getElementById("login-error").textContent = "รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง";
+      return;
+    }
+    sessionStorage.setItem(SESSION_KEY, code);
+    await enterApp(emp);
+  }
+
+  async function enterApp(emp){
+    currentEmployee = emp;
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app-shell").classList.add("active");
+    renderNav();
+    await goToPage("dashboard");
+  }
+
+  function logout(){
+    sessionStorage.removeItem(SESSION_KEY);
+    currentEmployee = null;
+    document.getElementById("app-shell").classList.remove("active");
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("pin-input").value = "";
+    document.getElementById("login-error").textContent = "";
+  }
+
+  function renderNav(){
+    const list = document.getElementById("nav-list");
+    const visible = MENUS.filter(m => m.roles.includes(currentEmployee.role));
+    list.innerHTML = visible.map(m =>
+      `<button class="nav-item" data-page="${m.id}" onclick="goToPage('${m.id}')">
+        <span class="icon">${m.icon}</span><span>${m.label}</span>
+      </button>`
+    ).join("") + `
+      <div class="nav-divider"></div>
+      <div class="sidebar-foot">
+        <div class="name">${currentEmployee.name}</div>
+        <div>${roleLabel(currentEmployee)}</div>
+        <span class="logout" onclick="logout()">ออกจากระบบ</span>
+      </div>
+    `;
+  }
+
+  function roleLabel(emp){
+    if(emp.role === "owner") return "เจ้าของร้าน";
+    const platform = emp.platform === "tiktok" ? "TikTok" : "Shopee";
+    const type = emp.employmentType === "full-time" ? "พนักงานประจำ" : "พาร์ทไทม์";
+    return `${platform} · ${type}`;
+  }
+
+  async function goToPage(pageId){
+    currentPage = pageId;
+    document.querySelectorAll(".nav-item").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.page === pageId);
+    });
+    const menu = MENUS.find(m => m.id === pageId);
+    document.getElementById("page-title").textContent = menu ? menu.label : "";
+    document.getElementById("role-badge").textContent = roleLabel(currentEmployee);
+    document.getElementById("sidebar").classList.remove("open");
+    document.getElementById("page-content").innerHTML = `<div class="meta" style="padding:20px 0;">กำลังโหลดข้อมูล...</div>`;
+    try {
+      await refreshAllData();
+    } catch(err){
+      showToast("เชื่อมต่อฐานข้อมูลไม่ได้ — " + err.message, "error");
+    }
+    renderPage(pageId);
+  }
+
+  function renderPage(pageId){
+    const el = document.getElementById("page-content");
+    if(pageId === "dashboard"){ el.innerHTML = renderDashboard(); return; }
+    if(pageId === "employees"){ el.innerHTML = renderEmployees(); return; }
+    if(pageId === "live-schedule"){ el.innerHTML = renderLiveSchedule(); return; }
+    if(pageId === "sales-entry"){ el.innerHTML = renderSalesEntry(); return; }
+    if(pageId === "live-summary"){ el.innerHTML = renderLiveSummary(); return; }
+    if(pageId === "stock"){ el.innerHTML = renderStock(); return; }
+    if(pageId === "payroll"){ el.innerHTML = renderPayroll(); return; }
+    el.innerHTML = renderPlaceholder(pageId);
+  }
+
+  function renderPlaceholder(pageId){
+    const menu = MENUS.find(m => m.id === pageId);
+    return `<div class="card"><div class="placeholder">
+      <span class="icon">${menu.icon}</span>
+      <h3>${menu.label}</h3>
+      <p>โมดูลนี้จะพร้อมใช้งานใน TASK ถัดไป — ตอนนี้เป็นแค่โครงเมนูให้เห็นสิทธิ์การเข้าถึง</p>
+    </div></div>`;
+  }
+
+  function salesByPlatform(orders){
+    return orders.reduce((acc,o) => { acc[o.platform] = (acc[o.platform]||0) + o.total; return acc; }, {tiktok:0, shopee:0});
+  }
+
+  function recentSessionsHtml(sessions, showEmployeeName){
+    const statusClassMap = {"นัดหมาย":"scheduled","กำลังไลฟ์":"live","จบแล้ว":"done"};
+    return sessions.slice().sort((a,b) => (b.date+b.startTime).localeCompare(a.date+a.startTime)).slice(0,5).map(s => {
+      const emp = getEmployeeById(s.employeeId);
+      return `
+        <div class="order-row">
+          <span>${s.date} · ${platformLabel(s.platform)}${showEmployeeName ? " · " + (emp ? emp.name : "-") : ""}</span>
+          <span class="status-chip ${statusClassMap[s.status]}">${s.status}</span>
+        </div>`;
+    }).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีรอบไลฟ์</div>`;
+  }
+
+  function renderDashboard(){
+    const today = new Date().toISOString().slice(0,10);
+    const month = new Date().toISOString().slice(0,7);
+    const isOwner = currentEmployee.role === "owner";
+    const visibleOrders = isOwner ? data.orders : data.orders.filter(o => o.employeeId === currentEmployee.id);
+    const visibleSessions = isOwner ? data.liveSessions : data.liveSessions.filter(s => s.employeeId === currentEmployee.id);
+
+    const todayOrders = visibleOrders.filter(o => o.timestamp.slice(0,10) === today);
+    const monthOrders = visibleOrders.filter(o => o.timestamp.slice(0,7) === month);
+    const todayTotal = todayOrders.reduce((s,o) => s + o.total, 0);
+    const monthTotal = monthOrders.reduce((s,o) => s + o.total, 0);
+
+    if(isOwner){
+      const todayByPlatform = salesByPlatform(todayOrders);
+      const monthByPlatform = salesByPlatform(monthOrders);
+      const rows = data.employees.filter(e => e.role === "staff").map(e => `
+        <tr>
+          <td>${e.name}</td>
+          <td><span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span></td>
+          <td><span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span></td>
+        </tr>`).join("");
+      return `
+        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายวันนี้</h3>
+          <div class="grid cols-3">
+            <div><div class="stat-label">TikTok</div><div class="stat-value">฿${todayByPlatform.tiktok.toLocaleString()}</div></div>
+            <div><div class="stat-label">Shopee</div><div class="stat-value">฿${todayByPlatform.shopee.toLocaleString()}</div></div>
+            <div><div class="stat-label">รวม</div><div class="stat-value">฿${todayTotal.toLocaleString()}</div></div>
+          </div>
+        </div>
+        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายเดือนนี้</h3>
+          <div class="grid cols-3">
+            <div><div class="stat-label">TikTok</div><div class="stat-value">฿${monthByPlatform.tiktok.toLocaleString()}</div></div>
+            <div><div class="stat-label">Shopee</div><div class="stat-value">฿${monthByPlatform.shopee.toLocaleString()}</div></div>
+            <div><div class="stat-label">รวม</div><div class="stat-value">฿${monthTotal.toLocaleString()}</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">รอบไลฟ์ล่าสุด</h3>
+          ${recentSessionsHtml(visibleSessions, true)}
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">ทีมไลฟ์ (เจ้าของเห็นทุกคน)</h3>
+          <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>`;
+    }
+
+    return `
+      <div class="card">
+        <h3 style="margin-top:0;">สวัสดี ${currentEmployee.name}</h3>
+        <p style="color:var(--text-sub);">คุณเห็นเฉพาะข้อมูลของตัวเองเท่านั้น — ${roleLabel(currentEmployee)}</p>
+      </div>
+      <div class="grid cols-3">
+        <div class="card"><div class="stat-label">ยอดขายวันนี้</div><div class="stat-value">฿${todayTotal.toLocaleString()}</div></div>
+        <div class="card"><div class="stat-label">ยอดขายเดือนนี้</div><div class="stat-value">฿${monthTotal.toLocaleString()}</div></div>
+        <div class="card"><div class="stat-label">ออเดอร์เดือนนี้</div><div class="stat-value">${monthOrders.length}</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">รอบไลฟ์ล่าสุดของฉัน</h3>
+        ${recentSessionsHtml(visibleSessions, false)}
+      </div>`;
+  }
+
+  function renderEmployees(){
+    const rows = data.employees.map(e => `
+      <tr>
+        <td>${e.name}</td>
+        <td>${e.code}</td>
+        <td>${e.role === "owner" ? '<span class="chip owner">เจ้าของ</span>' : `<span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>`}</td>
+        <td>${e.employmentType ? `<span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>` : "-"}</td>
+        <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : "-"}</td>
+        <td><button class="btn ghost sm" onclick="openEmpModal(${e.id})">แก้ไข</button></td>
+      </tr>`).join("");
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="margin:0;">รายชื่อผู้ใช้ระบบ</h3>
+          <button class="btn" onclick="openEmpModal()">+ เพิ่มพนักงาน</button>
+        </div>
+        <table>
+          <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือนฐาน</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function toggleEmpFields(){
+    const isOwner = document.getElementById("emp-role").value === "owner";
+    document.getElementById("emp-staff-fields").style.display = isOwner ? "none" : "block";
+  }
+  function toggleSalaryField(){
+    const isFull = document.getElementById("emp-employment").value === "full-time";
+    document.getElementById("emp-salary-field").style.display = isFull ? "block" : "none";
+  }
+
+  function openEmpModal(id){
+    const modal = document.getElementById("emp-modal");
+    if(id){
+      const e = data.employees.find(x => x.id === id);
+      document.getElementById("emp-modal-title").textContent = "แก้ไขพนักงาน";
+      document.getElementById("emp-id").value = e.id;
+      document.getElementById("emp-name").value = e.name;
+      document.getElementById("emp-code").value = e.code;
+      document.getElementById("emp-role").value = e.role;
+      document.getElementById("emp-platform").value = e.platform === "both" ? "tiktok" : e.platform;
+      document.getElementById("emp-employment").value = e.employmentType || "full-time";
+      document.getElementById("emp-salary").value = e.baseSalary || "";
+    } else {
+      document.getElementById("emp-modal-title").textContent = "เพิ่มพนักงาน";
+      document.getElementById("emp-id").value = "";
+      document.getElementById("emp-name").value = "";
+      document.getElementById("emp-code").value = "";
+      document.getElementById("emp-role").value = "staff";
+      document.getElementById("emp-platform").value = "tiktok";
+      document.getElementById("emp-employment").value = "full-time";
+      document.getElementById("emp-salary").value = "";
+    }
+    toggleEmpFields();
+    toggleSalaryField();
+    modal.classList.add("active");
+  }
+  function closeEmpModal(){
+    document.getElementById("emp-modal").classList.remove("active");
+  }
+
+  async function saveEmployee(){
+    const id = document.getElementById("emp-id").value;
+    const name = document.getElementById("emp-name").value.trim();
+    const code = document.getElementById("emp-code").value.trim();
+    const role = document.getElementById("emp-role").value;
+    if(!name || !code){ showToast("กรอกชื่อและรหัส PIN ให้ครบ", "error"); return; }
+    const codeClash = data.employees.find(e => e.code === code && String(e.id) !== String(id));
+    if(codeClash){ showToast("รหัส PIN นี้ถูกใช้แล้วโดย " + codeClash.name, "error"); return; }
+
+    const payload = {
+      name,
+      code,
+      role,
+      platform: role === "owner" ? "both" : document.getElementById("emp-platform").value,
+      employment_type: role === "owner" ? null : document.getElementById("emp-employment").value,
+      base_salary: role === "owner" ? null :
+        (document.getElementById("emp-employment").value === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null)
+    };
+
+    const { error } = id
+      ? await sb.from("employees").update(payload).eq("id", Number(id))
+      : await sb.from("employees").insert(payload);
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+
+    await refreshAllData();
+    closeEmpModal();
+    renderPage("employees");
+  }
+
+  // ===== helpers =====
+  function getEmployeeById(id){ return data.employees.find(e => e.id === id); }
+  function staffEmployees(){ return data.employees.filter(e => e.role === "staff"); }
+  function platformLabel(p){ return p === "tiktok" ? "TikTok" : "Shopee"; }
+  function durationMinutesFromRange(startTime, endTime){
+    const [sh,sm] = startTime.split(":").map(Number);
+    const [eh,em] = endTime.split(":").map(Number);
+    let startMin = sh*60+sm, endMin = eh*60+em;
+    if(endMin <= startMin) endMin += 24*60;
+    return endMin - startMin;
+  }
+  function formatMinutes(totalMin){
+    const hours = Math.floor(totalMin/60), mins = totalMin % 60;
+    return mins === 0 ? `${hours} ชั่วโมง` : `${hours} ชม. ${mins} นาที`;
+  }
+  function sessionDurationLabel(s){
+    return formatMinutes(durationMinutesFromRange(s.startTime, s.endTime));
+  }
+  function actualDurationDisplay(s){
+    if(s.status === "จบแล้ว" && s.checkInTime && s.actualEndTime){
+      const actualMin = Math.round((new Date(s.actualEndTime) - new Date(s.checkInTime)) / 60000);
+      const schedMin = durationMinutesFromRange(s.startTime, s.endTime);
+      const label = "ไลฟ์จริง " + formatMinutes(actualMin);
+      if(actualMin < schedMin){
+        return `${label} <span class="status-chip live">⚠️ สั้นกว่ากำหนด ${formatMinutes(schedMin)}</span>`;
+      }
+      return `${label} <span class="status-chip done">✅ ครบตามกำหนด</span>`;
+    }
+    return sessionDurationLabel(s);
+  }
+  function findActiveSession(employeeId){
+    return data.liveSessions.find(s => s.employeeId === employeeId && s.status === "กำลังไลฟ์");
+  }
+  function resizeImageFile(file, maxDim, cb){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const img = new Image();
+      img.onload = function(){
+        let w = img.width, h = img.height;
+        if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+        else if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        cb(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ===== live schedule =====
+  let scheduleFilterPlatform = "all";
+  function setScheduleFilter(p){
+    scheduleFilterPlatform = p;
+    renderPage("live-schedule");
+  }
+
+  function renderLiveSchedule(){
+    let sessions = data.liveSessions.slice();
+    if(scheduleFilterPlatform !== "all"){
+      sessions = sessions.filter(s => s.platform === scheduleFilterPlatform);
+    }
+    sessions.sort((a,b) => (b.date+b.startTime).localeCompare(a.date+a.startTime));
+    const rows = sessions.map(s => sessionCardHtml(s)).join("") ||
+      `<div class="empty-note"><span class="icon">🎥</span>ยังไม่มีตารางไลฟ์ในหมวดนี้ กด "+ นัดหมายไลฟ์ใหม่" เพื่อเริ่มลงตาราง</div>`;
+    return `
+      <div class="card">
+        <div class="toolbar">
+          <h3 style="margin:0;">ตารางไลฟ์ทีม (ทุกคนเห็นร่วมกัน กันเวลาชนกัน)</h3>
+          <button class="btn" onclick="openSessionModal()">+ นัดหมายไลฟ์ใหม่</button>
+        </div>
+        <div class="tab-bar">
+          <button class="tab-btn ${scheduleFilterPlatform === "all" ? "active" : ""}" onclick="setScheduleFilter('all')">ทั้งหมด</button>
+          <button class="tab-btn ${scheduleFilterPlatform === "tiktok" ? "active" : ""}" onclick="setScheduleFilter('tiktok')">TikTok</button>
+          <button class="tab-btn ${scheduleFilterPlatform === "shopee" ? "active" : ""}" onclick="setScheduleFilter('shopee')">Shopee</button>
+        </div>
+        ${rows}
+      </div>`;
+  }
+
+  function sessionCardHtml(s){
+    const statusClass = {"นัดหมาย":"scheduled","กำลังไลฟ์":"live","จบแล้ว":"done"}[s.status];
+    const emp = getEmployeeById(s.employeeId);
+    const orderCount = data.orders.filter(o => o.liveSessionId === s.id).length;
+    const isOwnSession = currentEmployee.id === s.employeeId;
+    let actionHtml = "";
+    if(isOwnSession && s.status === "นัดหมาย"){
+      actionHtml = `<button class="btn sm" onclick="triggerCheckIn(${s.id})">🤳 เริ่มไลฟ์</button>`;
+    } else if(isOwnSession && s.status === "กำลังไลฟ์"){
+      actionHtml = `<button class="btn sm ghost" onclick="goToPage('sales-entry')">🛒 บันทึกยอดขาย</button>
+        <button class="btn sm" onclick="triggerEndLive(${s.id})">🧾 จบไลฟ์</button>`;
+    }
+    let photosHtml = "";
+    if(s.checkInPhoto || s.salesProofPhoto){
+      photosHtml = `<div class="session-photos">
+        ${s.checkInPhoto ? `<div class="ph"><img src="${s.checkInPhoto}">เช็คอิน</div>` : ""}
+        ${s.salesProofPhoto ? `<div class="ph"><img src="${s.salesProofPhoto}">แคปยอด</div>` : ""}
+      </div>`;
+    }
+    return `
+      <div class="session-card">
+        <div class="top-row">
+          <div>
+            <b>${s.date} · ${s.startTime}-${s.endTime}</b>
+            <span class="chip ${s.platform}">${platformLabel(s.platform)}</span>
+            <span class="meta"> · ${emp ? emp.name : "-"}</span>
+          </div>
+          <span class="status-chip ${statusClass}">${s.status}</span>
+        </div>
+        <div class="meta">${actualDurationDisplay(s)} · ${orderCount} ออเดอร์บันทึกแล้ว</div>
+        ${photosHtml}
+        ${actionHtml ? `<div style="margin-top:12px;">${actionHtml}</div>` : ""}
+      </div>`;
+  }
+
+  function openSessionModal(){
+    const field = document.getElementById("session-employee-field");
+    if(currentEmployee.role === "owner"){
+      field.style.display = "block";
+      document.getElementById("session-employee").innerHTML =
+        staffEmployees().map(e => `<option value="${e.id}">${e.name} (${platformLabel(e.platform)})</option>`).join("");
+    } else {
+      field.style.display = "none";
+    }
+    document.getElementById("session-date").value = "";
+    document.getElementById("session-start").value = "";
+    document.getElementById("session-end").value = "";
+    document.getElementById("session-modal").classList.add("active");
+  }
+  function closeSessionModal(){
+    document.getElementById("session-modal").classList.remove("active");
+  }
+  async function saveSession(){
+    let employeeId, platform;
+    if(currentEmployee.role === "owner"){
+      employeeId = Number(document.getElementById("session-employee").value);
+      const emp = getEmployeeById(employeeId);
+      if(!emp){ showToast("ยังไม่มีพนักงานให้เลือก", "error"); return; }
+      platform = emp.platform;
+    } else {
+      employeeId = currentEmployee.id;
+      platform = currentEmployee.platform;
+    }
+    const date = document.getElementById("session-date").value;
+    const startTime = document.getElementById("session-start").value;
+    const endTime = document.getElementById("session-end").value;
+    if(!date || !startTime || !endTime){ showToast("กรอกวันที่และเวลาให้ครบ", "error"); return; }
+    const { error } = await sb.from("live_sessions").insert({
+      employee_id: employeeId, platform, date, start_time: startTime, end_time: endTime,
+      status: "นัดหมาย"
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    closeSessionModal();
+    renderPage("live-schedule");
+  }
+
+  let pendingCheckInSessionId = null;
+  let pendingEndLiveSessionId = null;
+
+  function triggerCheckIn(sessionId){
+    const s = data.liveSessions.find(x => x.id === sessionId);
+    const active = findActiveSession(s.employeeId);
+    if(active){ showToast("มีรอบไลฟ์ที่กำลังเปิดอยู่แล้ว ต้องปิดไลฟ์รอบนั้นก่อน", "error"); return; }
+    pendingCheckInSessionId = sessionId;
+    const input = document.getElementById("checkin-file-input");
+    input.value = "";
+    input.click();
+  }
+  function handleCheckInFile(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    resizeImageFile(file, 480, function(dataUrl){
+      startLiveSession(pendingCheckInSessionId, dataUrl);
+    });
+  }
+  async function startLiveSession(sessionId, photoDataUrl){
+    const { error } = await sb.from("live_sessions").update({
+      status: "กำลังไลฟ์",
+      check_in_photo: photoDataUrl,
+      check_in_time: new Date().toISOString()
+    }).eq("id", sessionId);
+    if(error){ showToast("เช็คอินไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    renderPage("live-schedule");
+  }
+
+  function triggerEndLive(sessionId){
+    pendingEndLiveSessionId = sessionId;
+    const input = document.getElementById("endlive-file-input");
+    input.value = "";
+    input.click();
+  }
+  function handleEndLiveFile(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    resizeImageFile(file, 480, function(dataUrl){
+      endLiveSession(pendingEndLiveSessionId, dataUrl);
+    });
+  }
+  async function endLiveSession(sessionId, photoDataUrl){
+    const s = data.liveSessions.find(x => x.id === sessionId);
+    const checkInTime = s ? s.checkInTime : null;
+    const startTime = s ? s.startTime : null;
+    const endTime = s ? s.endTime : null;
+    const actualEndTime = new Date().toISOString();
+
+    const { error } = await sb.from("live_sessions").update({
+      status: "จบแล้ว",
+      sales_proof_photo: photoDataUrl,
+      actual_end_time: actualEndTime
+    }).eq("id", sessionId);
+    if(error){ showToast("ปิดไลฟ์ไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    renderPage("live-schedule");
+
+    if(checkInTime){
+      const schedMin = durationMinutesFromRange(startTime, endTime);
+      const actualMin = Math.round((new Date(actualEndTime) - new Date(checkInTime)) / 60000);
+      if(actualMin < schedMin){
+        showToast(`ปิดไลฟ์แล้ว — ไลฟ์จริง ${formatMinutes(actualMin)} (กำหนดไว้ ${formatMinutes(schedMin)})\n⚠️ สั้นกว่าที่กำหนด ระบบบันทึกเวลาจริงไว้ให้ตรวจสอบแล้ว`, "warn");
+      } else {
+        showToast(`ปิดไลฟ์แล้ว — ไลฟ์จริง ${formatMinutes(actualMin)} ครบตามที่กำหนด (${formatMinutes(schedMin)}) ✅`, "success");
+      }
+    }
+  }
+
+  // ===== sales entry =====
+  let salesEntryMode = "itemized";
+  function setSalesEntryMode(mode){
+    salesEntryMode = mode;
+    renderPage("sales-entry");
+  }
+
+  function renderSalesEntry(){
+    const active = findActiveSession(currentEmployee.id);
+    if(!active){
+      return `<div class="card"><div class="empty-note">
+        <span class="icon">🛒</span>ยังไม่มีไลฟ์ที่กำลังเปิดอยู่ของคุณ<br>
+        <button class="btn" style="margin-top:14px;" onclick="goToPage('live-schedule')">ไปที่ตารางไลฟ์เพื่อเริ่มไลฟ์</button>
+      </div></div>`;
+    }
+    const myOrders = data.orders.filter(o => o.liveSessionId === active.id);
+    const total = myOrders.reduce((sum,o) => sum + o.total, 0);
+    const orderRows = myOrders.slice().reverse().map(o => `
+      <div class="order-row">
+        <span>${o.productId ? `${o.productName} ×${o.qty}` : o.productName}${o.customerName ? " · " + o.customerName : ""}</span>
+        <b>฿${o.total.toLocaleString()}</b>
+      </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ในรอบนี้</div>`;
+
+    const formHtml = salesEntryMode === "itemized" ? itemizedFormHtml() : quickFormHtml();
+
+    return `
+      <div class="total-banner">
+        <span>ยอดรวมรอบนี้ (${platformLabel(active.platform)} · ${active.startTime}-${active.endTime})</span>
+        <span class="amt">฿${total.toLocaleString()}</span>
+      </div>
+      <div class="card">
+        <div class="tab-bar">
+          <button class="tab-btn ${salesEntryMode === "itemized" ? "active" : ""}" onclick="setSalesEntryMode('itemized')">ทีละสินค้า</button>
+          <button class="tab-btn ${salesEntryMode === "quick" ? "active" : ""}" onclick="setSalesEntryMode('quick')">ยอดรวมด่วน</button>
+        </div>
+        ${formHtml}
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">ออเดอร์ในรอบนี้ (${myOrders.length})</h3>
+        ${orderRows}
+      </div>`;
+  }
+
+  function itemizedFormHtml(){
+    const productOptions = data.products.map(p =>
+      `<option value="${p.id}">${p.name} (เหลือ ${p.stockQty}) — ฿${p.price.toLocaleString()}</option>`).join("");
+    return `
+      <h3 style="margin-top:0;">บันทึกออเดอร์ทีละสินค้า</h3>
+      <p class="meta" style="margin-top:-8px;">ตัดสต๊อกอัตโนมัติ + นับเป็นสินค้าขายดีในสรุปผลไลฟ์</p>
+      <div class="field"><label>สินค้า</label><select id="order-product">${productOptions}</select></div>
+      <div class="field"><label>จำนวน</label><input id="order-qty" type="number" min="1" value="1"></div>
+      <div class="field"><label>ชื่อลูกค้า</label><input id="order-customer" placeholder="ไม่บังคับ"></div>
+      <button class="btn" onclick="addOrder(${findActiveSession(currentEmployee.id).id})">+ บันทึกออเดอร์</button>`;
+  }
+
+  function quickFormHtml(){
+    return `
+      <h3 style="margin-top:0;">ลงยอดรวมด่วน (ไม่ระบุสินค้า)</h3>
+      <p class="meta" style="margin-top:-8px;">เหมาะกับตอนไลฟ์เร็วไม่ทันคีย์ทีละสินค้า — ยอดนี้นับรวมยอดขาย แต่ไม่ตัดสต๊อกและไม่นับในสินค้าขายดี</p>
+      <div class="field"><label>ยอดขาย (บาท)</label><input id="quick-amount" type="number" min="1" placeholder="เช่น 1500"></div>
+      <div class="field"><label>โน้ต</label><input id="quick-note" placeholder="ไม่บังคับ"></div>
+      <button class="btn" onclick="addQuickOrder(${findActiveSession(currentEmployee.id).id})">+ บันทึกยอดรวม</button>`;
+  }
+
+  async function addOrder(sessionId){
+    const productId = Number(document.getElementById("order-product").value);
+    const qty = Number(document.getElementById("order-qty").value);
+    const customerName = document.getElementById("order-customer").value.trim();
+    if(!qty || qty < 1){ showToast("กรอกจำนวนให้ถูกต้อง", "error"); return; }
+
+    // re-fetch the product fresh right before deducting to reduce races with other devices
+    const { data: freshProduct, error: fetchErr } = await sb.from("products").select("*").eq("id", productId).single();
+    if(fetchErr || !freshProduct){ showToast("ยังไม่มีสินค้าในสต๊อก", "error"); return; }
+    if(qty > freshProduct.stock_qty){ showToast(`สินค้าไม่พอ เหลือ ${freshProduct.stock_qty} ชิ้น`, "error"); return; }
+
+    const session = data.liveSessions.find(s => s.id === sessionId);
+    const { error: stockErr } = await sb.from("products").update({ stock_qty: freshProduct.stock_qty - qty }).eq("id", productId);
+    if(stockErr){ showToast("ตัดสต๊อกไม่สำเร็จ: " + stockErr.message, "error"); return; }
+
+    const { error: orderErr } = await sb.from("orders").insert({
+      live_session_id: sessionId,
+      employee_id: currentEmployee.id,
+      platform: session.platform,
+      product_id: freshProduct.id,
+      product_name: freshProduct.name,
+      qty,
+      price_per_unit: freshProduct.price,
+      total: freshProduct.price * qty,
+      customer_name: customerName
+    });
+    if(orderErr){ showToast("บันทึกออเดอร์ไม่สำเร็จ: " + orderErr.message, "error"); return; }
+
+    await refreshAllData();
+    renderPage("sales-entry");
+  }
+
+  async function addQuickOrder(sessionId){
+    const amount = Number(document.getElementById("quick-amount").value);
+    const note = document.getElementById("quick-note").value.trim();
+    if(!amount || amount < 1){ showToast("กรอกยอดขายให้ถูกต้อง", "error"); return; }
+    const session = data.liveSessions.find(s => s.id === sessionId);
+    const { error } = await sb.from("orders").insert({
+      live_session_id: sessionId,
+      employee_id: currentEmployee.id,
+      platform: session.platform,
+      product_id: null,
+      product_name: "ยอดขายรวม (ไม่ระบุสินค้า)",
+      qty: null,
+      price_per_unit: null,
+      total: amount,
+      customer_name: note
+    });
+    if(error){ showToast("บันทึกยอดรวมไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    renderPage("sales-entry");
+  }
+
+  // ===== live summary =====
+  let selectedSummarySessionId = null;
+
+  function renderLiveSummary(){
+    const isOwner = currentEmployee.role === "owner";
+    const sessions = (isOwner ? data.liveSessions : data.liveSessions.filter(s => s.employeeId === currentEmployee.id))
+      .filter(s => s.status === "จบแล้ว")
+      .slice().sort((a,b) => (b.date+b.startTime).localeCompare(a.date+a.startTime));
+
+    if(sessions.length === 0){
+      return `<div class="card"><div class="empty-note"><span class="icon">📋</span>ยังไม่มีรอบไลฟ์ที่จบแล้ว</div></div>`;
+    }
+    if(selectedSummarySessionId === null || !sessions.find(s => s.id === selectedSummarySessionId)){
+      selectedSummarySessionId = sessions[0].id;
+    }
+    const listHtml = sessions.map(s => summaryListRowHtml(s)).join("");
+    const detailHtml = summaryDetailHtml(sessions.find(s => s.id === selectedSummarySessionId));
+    return `
+      <div class="summary-layout">
+        <div class="card summary-list">${listHtml}</div>
+        <div>${detailHtml}</div>
+      </div>`;
+  }
+
+  function summaryListRowHtml(s){
+    const emp = getEmployeeById(s.employeeId);
+    const active = s.id === selectedSummarySessionId;
+    return `
+      <div class="summary-row ${active ? "active" : ""}" onclick="selectSummary(${s.id})">
+        <div class="d">${s.date} · ${s.startTime}-${s.endTime}</div>
+        <div class="m">${platformLabel(s.platform)}${currentEmployee.role === "owner" ? " · " + (emp ? emp.name : "-") : ""}</div>
+      </div>`;
+  }
+
+  function selectSummary(id){
+    selectedSummarySessionId = id;
+    renderPage("live-summary");
+  }
+
+  function summaryDetailHtml(s){
+    const orders = data.orders.filter(o => o.liveSessionId === s.id);
+    const total = orders.reduce((sum,o) => sum + o.total, 0);
+    const emp = getEmployeeById(s.employeeId);
+
+    const byProduct = {};
+    orders.forEach(o => {
+      if(!o.productId) return; // ยอดรวมด่วนไม่ระบุสินค้า ไม่นับในสินค้าขายดี
+      if(!byProduct[o.productId]) byProduct[o.productId] = {name: o.productName, qty: 0, revenue: 0};
+      byProduct[o.productId].qty += o.qty;
+      byProduct[o.productId].revenue += o.total;
+    });
+    const quickTotal = orders.filter(o => !o.productId).reduce((sum,o) => sum + o.total, 0);
+    const top5 = Object.values(byProduct).sort((a,b) => b.qty - a.qty).slice(0,5);
+    const topRows = top5.map((p,i) => `
+      <div class="order-row">
+        <span>#${i+1} ${p.name}</span>
+        <b>${p.qty} ชิ้น · ฿${p.revenue.toLocaleString()}</b>
+      </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ทีละสินค้าในรอบนี้</div>`;
+    const quickNote = quickTotal > 0
+      ? `<div class="meta" style="margin-top:10px;">+ มียอดรวมด่วนที่ไม่ระบุสินค้าอีก ฿${quickTotal.toLocaleString()} (ไม่นับในอันดับนี้)</div>`
+      : "";
+
+    return `
+      <div class="card">
+        <div class="toolbar">
+          <h3 style="margin:0;">${s.date} · ${s.startTime}-${s.endTime} <span class="chip ${s.platform}">${platformLabel(s.platform)}</span></h3>
+          <span class="meta">${actualDurationDisplay(s)}${currentEmployee.role === "owner" ? " · " + (emp ? emp.name : "-") : ""}</span>
+        </div>
+        <div class="grid cols-3">
+          <div><div class="stat-label">ยอดขายรวม</div><div class="stat-value">฿${total.toLocaleString()}</div></div>
+          <div><div class="stat-label">จำนวนออเดอร์</div><div class="stat-value">${orders.length}</div></div>
+          <div><div class="stat-label">สินค้าขายดีอันดับ 1</div><div class="stat-value" style="font-size:16px;">${top5[0] ? top5[0].name : "-"}</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">สินค้าขายดี 5 อันดับ</h3>
+        ${topRows}
+        ${quickNote}
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">หลักฐานประกอบ</h3>
+        <div class="session-photos" style="gap:22px;">
+          ${s.checkInPhoto ? `<div class="ph"><img src="${s.checkInPhoto}" style="width:120px;height:120px;">เช็คอินตอนเริ่มไลฟ์</div>` : `<div class="meta">ไม่มีรูปเช็คอิน</div>`}
+          ${s.salesProofPhoto ? `<div class="ph"><img src="${s.salesProofPhoto}" style="width:120px;height:120px;">แคปยอดตอนปิดไลฟ์</div>` : `<div class="meta">ไม่มีรูปแคปยอด</div>`}
+        </div>
+      </div>`;
+  }
+
+  // ===== stock =====
+  const LOW_STOCK_THRESHOLD = 5;
+
+  function renderStock(){
+    const isOwner = currentEmployee.role === "owner";
+    const rows = data.products.map(p => {
+      const low = p.stockQty <= LOW_STOCK_THRESHOLD;
+      return `
+        <tr>
+          <td>${p.name}</td>
+          <td>฿${p.price.toLocaleString()}</td>
+          <td>${low ? `<span class="chip warn">เหลือน้อย ${p.stockQty}</span>` : p.stockQty}</td>
+          ${isOwner ? `<td><button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไข</button></td>` : ""}
+        </tr>`;
+    }).join("") || `<tr><td colspan="4">ยังไม่มีสินค้าในสต๊อก</td></tr>`;
+    return `
+      <div class="card">
+        <div class="toolbar">
+          <h3 style="margin:0;">สต๊อกสินค้า (ก้อนเดียว ใช้ร่วมกันทั้ง TikTok/Shopee)</h3>
+          ${isOwner ? `<button class="btn" onclick="openProductModal()">+ เพิ่มสินค้า</button>` : ""}
+        </div>
+        <table>
+          <thead><tr><th>สินค้า</th><th>ราคา</th><th>คงเหลือ</th>${isOwner ? "<th></th>" : ""}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function openProductModal(id){
+    if(currentEmployee.role !== "owner") return;
+    const modal = document.getElementById("product-modal");
+    if(id){
+      const p = data.products.find(x => x.id === id);
+      document.getElementById("product-modal-title").textContent = "แก้ไขสินค้า";
+      document.getElementById("product-id").value = p.id;
+      document.getElementById("product-name").value = p.name;
+      document.getElementById("product-price").value = p.price;
+      document.getElementById("product-stock").value = p.stockQty;
+    } else {
+      document.getElementById("product-modal-title").textContent = "เพิ่มสินค้า";
+      document.getElementById("product-id").value = "";
+      document.getElementById("product-name").value = "";
+      document.getElementById("product-price").value = "";
+      document.getElementById("product-stock").value = "";
+    }
+    modal.classList.add("active");
+  }
+  function closeProductModal(){
+    document.getElementById("product-modal").classList.remove("active");
+  }
+  async function saveProduct(){
+    const id = document.getElementById("product-id").value;
+    const name = document.getElementById("product-name").value.trim();
+    const price = Number(document.getElementById("product-price").value);
+    const stockQty = Number(document.getElementById("product-stock").value);
+    if(!name || !price || price <= 0 || isNaN(stockQty) || stockQty < 0){
+      showToast("กรอกชื่อ ราคา และจำนวนคงเหลือให้ครบและถูกต้อง", "error");
+      return;
+    }
+    const payload = { name, price, stock_qty: stockQty };
+    const { error } = id
+      ? await sb.from("products").update(payload).eq("id", Number(id))
+      : await sb.from("products").insert(payload);
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    closeProductModal();
+    renderPage("stock");
+  }
+
+  // ===== payroll (เฉพาะพนักงานประจำ) =====
+  function findMatchingTier(totalSales){
+    const active = data.commissionTiers.filter(t => t.minSales !== null && t.minSales !== undefined);
+    const eligible = active.filter(t => totalSales >= t.minSales && (t.maxSales === null || t.maxSales === undefined || totalSales <= t.maxSales));
+    if(eligible.length === 0) return null;
+    return eligible.reduce((best,t) => (best === null || t.minSales > best.minSales) ? t : best, null);
+  }
+
+  function monthlySales(employeeId, monthStr){
+    return data.orders
+      .filter(o => o.employeeId === employeeId && o.timestamp.slice(0,7) === monthStr)
+      .reduce((sum,o) => sum + o.total, 0);
+  }
+
+  function countAbsentDays(employeeId, monthStr){
+    const today = new Date(); today.setHours(0,0,0,0);
+    return data.liveSessions.filter(s => {
+      if(s.employeeId !== employeeId) return false;
+      if(s.date.slice(0,7) !== monthStr) return false;
+      if(s.status !== "นัดหมาย") return false;
+      return new Date(s.date + "T00:00:00") < today;
+    }).length;
+  }
+
+  function renderPayroll(){
+    const fullTimeEmployees = data.employees.filter(e => e.employmentType === "full-time");
+    const tiersRows = data.commissionTiers.map((t,i) => `
+      <tr>
+        <td>ขั้น ${i+1}</td>
+        <td><input type="number" id="tier-min-${t.id}" value="${t.minSales === null ? "" : t.minSales}" placeholder="ว่าง = ยังไม่เปิดใช้"></td>
+        <td><input type="number" id="tier-max-${t.id}" value="${t.maxSales === null ? "" : t.maxSales}" placeholder="ว่าง = ไม่มีเพดาน"></td>
+        <td><input type="number" id="tier-rate-${t.id}" value="${t.ratePercent}"></td>
+      </tr>`).join("");
+    const employeeOptions = fullTimeEmployees.map(e => `<option value="${e.id}">${e.name}</option>`).join("");
+    const currentMonth = new Date().toISOString().slice(0,7);
+
+    return `
+      <div class="card">
+        <h3 style="margin-top:0;">ตารางค่าคอมมิชชั่นแบบขั้นบันได</h3>
+        <p class="meta" style="margin-top:-8px;margin-bottom:14px;">ขั้นไหนเว้นว่างช่อง "ยอดขายขั้นต่ำ" = ยังไม่เปิดใช้งาน ระบบจะข้ามขั้นนั้นเสมอ</p>
+        <table>
+          <thead><tr><th></th><th>ยอดขายขั้นต่ำ</th><th>ยอดขายสูงสุด</th><th>% ค่าคอม</th></tr></thead>
+          <tbody>${tiersRows}</tbody>
+        </table>
+        <button class="btn" style="margin-top:14px;" onclick="saveCommissionTiers()">บันทึกตารางค่าคอม</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">คำนวณเงินเดือน & ค่าคอม</h3>
+        ${fullTimeEmployees.length === 0 ? `<p class="meta">ยังไม่มีพนักงานประจำในระบบ</p>` : `
+        <div class="field"><label>เดือน</label><input type="month" id="payroll-month" value="${currentMonth}"></div>
+        <div class="field"><label>พนักงาน</label><select id="payroll-employee">${employeeOptions}</select></div>
+        <button class="btn" onclick="calculatePayroll()">คำนวณ</button>
+        <div id="payroll-result" style="margin-top:18px;"></div>
+        `}
+      </div>`;
+  }
+
+  async function saveCommissionTiers(){
+    const updates = data.commissionTiers.map(t => {
+      const minVal = document.getElementById(`tier-min-${t.id}`).value;
+      const maxVal = document.getElementById(`tier-max-${t.id}`).value;
+      const rateVal = document.getElementById(`tier-rate-${t.id}`).value;
+      return sb.from("commission_tiers").update({
+        min_sales: minVal === "" ? null : Number(minVal),
+        max_sales: maxVal === "" ? null : Number(maxVal),
+        rate_percent: rateVal === "" ? 0 : Number(rateVal)
+      }).eq("id", t.id);
+    });
+    const results = await Promise.all(updates);
+    const failed = results.find(r => r.error);
+    if(failed){ showToast("บันทึกไม่สำเร็จ: " + failed.error.message, "error"); return; }
+    await refreshAllData();
+    renderPage("payroll");
+  }
+
+  function calculatePayroll(){
+    const employeeId = Number(document.getElementById("payroll-employee").value);
+    const monthStr = document.getElementById("payroll-month").value;
+    if(!monthStr){ showToast("เลือกเดือนก่อน", "error"); return; }
+    const emp = getEmployeeById(employeeId);
+    const totalSales = monthlySales(employeeId, monthStr);
+    const tier = findMatchingTier(totalSales);
+    const commission = tier ? totalSales * tier.ratePercent / 100 : 0;
+    const absentDays = countAbsentDays(employeeId, monthStr);
+    const deduction = Math.round((emp.baseSalary / 30) * absentDays);
+    const net = emp.baseSalary + commission - deduction;
+    document.getElementById("payroll-result").innerHTML = `
+      <div class="grid cols-3">
+        <div><div class="stat-label">ยอดขายรวมเดือนนี้</div><div class="stat-value">฿${totalSales.toLocaleString()}</div></div>
+        <div><div class="stat-label">ขั้นค่าคอมที่ตรง</div><div class="stat-value" style="font-size:16px;">${tier ? tier.ratePercent + "%" : "ไม่พบขั้นที่ตรง"}</div></div>
+        <div><div class="stat-label">ค่าคอม</div><div class="stat-value">฿${commission.toLocaleString()}</div></div>
+      </div>
+      <div class="grid cols-3" style="margin-top:16px;">
+        <div><div class="stat-label">วันขาด</div><div class="stat-value">${absentDays} วัน</div></div>
+        <div><div class="stat-label">เงินหัก</div><div class="stat-value" style="color:var(--danger);">-฿${deduction.toLocaleString()}</div></div>
+        <div><div class="stat-label">เงินเดือนสุทธิ</div><div class="stat-value">฿${net.toLocaleString()}</div></div>
+      </div>
+      <div class="meta" style="margin-top:14px;">เงินเดือนฐาน ฿${emp.baseSalary.toLocaleString()} + ค่าคอม ฿${commission.toLocaleString()} − เงินหัก ฿${deduction.toLocaleString()} = สุทธิ ฿${net.toLocaleString()}</div>`;
+  }
+
+  // init: load from Supabase, then keep session across refresh
+  (async function init(){
+    const btn = document.querySelector("#login-screen button");
+    const input = document.getElementById("pin-input");
+    btn.disabled = true; input.disabled = true; btn.textContent = "กำลังเชื่อมต่อ...";
+    try {
+      await refreshAllData();
+    } catch(err){
+      document.getElementById("login-error").textContent = "เชื่อมต่อฐานข้อมูลไม่ได้ ลองรีเฟรชหน้าใหม่";
+      btn.textContent = "เข้าสู่ระบบ";
+      return;
+    }
+    btn.disabled = false; input.disabled = false; btn.textContent = "เข้าสู่ระบบ";
+
+    const sessionCode = sessionStorage.getItem(SESSION_KEY);
+    if(sessionCode){
+      const emp = data.employees.find(e => e.code === sessionCode);
+      if(emp){ await enterApp(emp); return; }
+    }
+    input.addEventListener("keydown", e => {
+      if(e.key === "Enter") attemptLogin();
+    });
+  })();
+</script>
+</body>
+</html>
