@@ -316,9 +316,10 @@
   }
 
   // ===== Supabase data layer =====
-  // anon key is meant to be public in client-side code — access is controlled by
-  // RLS policies on the Supabase side (see supabase-schema.sql), same trust model
-  // the app already had with the plaintext PIN login.
+  // The anon key is public in client-side code (normal for Supabase), but it grants
+  // no direct table access — every read/write goes through PIN-checked SECURITY DEFINER
+  // functions (see supabase-schema-secure.sql), so knowing the anon key alone isn't
+  // enough to read or change any data.
   const SUPABASE_URL = "https://dlxszrpiwomjfniqbnpe.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRseHN6cnBpd29tamZuaXFibnBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDgzMTcsImV4cCI6MjA5OTMyNDMxN30.INpHHMeERE5U_0y28zjF9o7LC2NS70IaIbK98-XB5n8";
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -326,6 +327,7 @@
 
   let data = { employees: [], commissionTiers: [], liveSessions: [], products: [], orders: [] };
   let currentEmployee = null;
+  let myCode = null;
 
   function mapEmployee(r){ return {id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform, employmentType:r.employment_type, baseSalary:r.base_salary}; }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
@@ -333,20 +335,24 @@
   function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time}; }
   function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at}; }
 
+  // Calls rpc_bootstrap with the given PIN; returns the matched employee row, or null if
+  // the PIN doesn't match anyone. Populates `data` from the payload either way it succeeds.
+  async function bootstrapWithCode(code){
+    const { data: payload, error } = await sb.rpc("rpc_bootstrap", { p_code: code });
+    if(error) throw error;
+    if(!payload) return null;
+    data.employees = (payload.employees || []).map(mapEmployee);
+    data.commissionTiers = (payload.commission_tiers || []).map(mapTier);
+    data.liveSessions = (payload.live_sessions || []).map(mapSession);
+    data.products = (payload.products || []).map(mapProduct);
+    data.orders = (payload.orders || []).map(mapOrder);
+    return mapEmployee(payload.me);
+  }
+
   async function refreshAllData(){
-    const [emp, tiers, sessions, products, orders] = await Promise.all([
-      sb.from("employees").select("*").order("id"),
-      sb.from("commission_tiers").select("*").order("sort_order"),
-      sb.from("live_sessions").select("*").order("id"),
-      sb.from("products").select("*").order("id"),
-      sb.from("orders").select("*").order("id")
-    ]);
-    if(emp.error) throw emp.error;
-    data.employees = (emp.data || []).map(mapEmployee);
-    data.commissionTiers = (tiers.data || []).map(mapTier);
-    data.liveSessions = (sessions.data || []).map(mapSession);
-    data.products = (products.data || []).map(mapProduct);
-    data.orders = (orders.data || []).map(mapOrder);
+    const me = await bootstrapWithCode(myCode);
+    if(!me) throw new Error("เซสชันหมดอายุ กรุณาล็อกอินใหม่");
+    currentEmployee = me;
   }
 
   const MENUS = [
@@ -365,25 +371,26 @@
     const code = document.getElementById("pin-input").value.trim();
     const btn = document.querySelector("#login-screen button");
     btn.disabled = true; btn.textContent = "กำลังตรวจสอบ...";
+    let me;
     try {
-      await refreshAllData();
+      me = await bootstrapWithCode(code);
     } catch(err){
       document.getElementById("login-error").textContent = "เชื่อมต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง";
       btn.disabled = false; btn.textContent = "เข้าสู่ระบบ";
       return;
     }
-    const emp = data.employees.find(e => e.code === code);
     btn.disabled = false; btn.textContent = "เข้าสู่ระบบ";
-    if(!emp){
+    if(!me){
       document.getElementById("login-error").textContent = "รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง";
       return;
     }
+    myCode = code;
+    currentEmployee = me;
     sessionStorage.setItem(SESSION_KEY, code);
-    await enterApp(emp);
+    await enterApp();
   }
 
-  async function enterApp(emp){
-    currentEmployee = emp;
+  async function enterApp(){
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app-shell").classList.add("active");
     renderNav();
@@ -393,6 +400,7 @@
   function logout(){
     sessionStorage.removeItem(SESSION_KEY);
     currentEmployee = null;
+    myCode = null;
     document.getElementById("app-shell").classList.remove("active");
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("pin-input").value = "";
@@ -611,19 +619,15 @@
     const codeClash = data.employees.find(e => e.code === code && String(e.id) !== String(id));
     if(codeClash){ showToast("รหัส PIN นี้ถูกใช้แล้วโดย " + codeClash.name, "error"); return; }
 
-    const payload = {
-      name,
-      code,
-      role,
-      platform: role === "owner" ? "both" : document.getElementById("emp-platform").value,
-      employment_type: role === "owner" ? null : document.getElementById("emp-employment").value,
-      base_salary: role === "owner" ? null :
-        (document.getElementById("emp-employment").value === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null)
-    };
+    const platform = role === "owner" ? "both" : document.getElementById("emp-platform").value;
+    const employmentType = role === "owner" ? null : document.getElementById("emp-employment").value;
+    const baseSalary = role === "owner" ? null :
+      (document.getElementById("emp-employment").value === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null);
 
-    const { error } = id
-      ? await sb.from("employees").update(payload).eq("id", Number(id))
-      : await sb.from("employees").insert(payload);
+    const { error } = await sb.rpc("rpc_upsert_employee", {
+      p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_emp_code: code,
+      p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary
+    });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
 
     await refreshAllData();
@@ -779,9 +783,9 @@
     const startTime = document.getElementById("session-start").value;
     const endTime = document.getElementById("session-end").value;
     if(!date || !startTime || !endTime){ showToast("กรอกวันที่และเวลาให้ครบ", "error"); return; }
-    const { error } = await sb.from("live_sessions").insert({
-      employee_id: employeeId, platform, date, start_time: startTime, end_time: endTime,
-      status: "นัดหมาย"
+    const { error } = await sb.rpc("rpc_save_session", {
+      p_code: myCode, p_employee_id: employeeId, p_platform: platform,
+      p_date: date, p_start: startTime, p_end: endTime
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
@@ -809,11 +813,7 @@
     });
   }
   async function startLiveSession(sessionId, photoDataUrl){
-    const { error } = await sb.from("live_sessions").update({
-      status: "กำลังไลฟ์",
-      check_in_photo: photoDataUrl,
-      check_in_time: new Date().toISOString()
-    }).eq("id", sessionId);
+    const { error } = await sb.rpc("rpc_start_live", { p_code: myCode, p_session_id: sessionId, p_photo: photoDataUrl });
     if(error){ showToast("เช็คอินไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     renderPage("live-schedule");
@@ -839,11 +839,7 @@
     const endTime = s ? s.endTime : null;
     const actualEndTime = new Date().toISOString();
 
-    const { error } = await sb.from("live_sessions").update({
-      status: "จบแล้ว",
-      sales_proof_photo: photoDataUrl,
-      actual_end_time: actualEndTime
-    }).eq("id", sessionId);
+    const { error } = await sb.rpc("rpc_end_live", { p_code: myCode, p_session_id: sessionId, p_photo: photoDataUrl });
     if(error){ showToast("ปิดไลฟ์ไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     renderPage("live-schedule");
@@ -929,27 +925,12 @@
     const customerName = document.getElementById("order-customer").value.trim();
     if(!qty || qty < 1){ showToast("กรอกจำนวนให้ถูกต้อง", "error"); return; }
 
-    // re-fetch the product fresh right before deducting to reduce races with other devices
-    const { data: freshProduct, error: fetchErr } = await sb.from("products").select("*").eq("id", productId).single();
-    if(fetchErr || !freshProduct){ showToast("ยังไม่มีสินค้าในสต๊อก", "error"); return; }
-    if(qty > freshProduct.stock_qty){ showToast(`สินค้าไม่พอ เหลือ ${freshProduct.stock_qty} ชิ้น`, "error"); return; }
-
-    const session = data.liveSessions.find(s => s.id === sessionId);
-    const { error: stockErr } = await sb.from("products").update({ stock_qty: freshProduct.stock_qty - qty }).eq("id", productId);
-    if(stockErr){ showToast("ตัดสต๊อกไม่สำเร็จ: " + stockErr.message, "error"); return; }
-
-    const { error: orderErr } = await sb.from("orders").insert({
-      live_session_id: sessionId,
-      employee_id: currentEmployee.id,
-      platform: session.platform,
-      product_id: freshProduct.id,
-      product_name: freshProduct.name,
-      qty,
-      price_per_unit: freshProduct.price,
-      total: freshProduct.price * qty,
-      customer_name: customerName
+    // rpc_add_order deducts stock and inserts the order atomically server-side —
+    // no race window between checking stock and writing the order.
+    const { error } = await sb.rpc("rpc_add_order", {
+      p_code: myCode, p_session_id: sessionId, p_product_id: productId, p_qty: qty, p_customer: customerName
     });
-    if(orderErr){ showToast("บันทึกออเดอร์ไม่สำเร็จ: " + orderErr.message, "error"); return; }
+    if(error){ showToast(error.message.includes("สินค้าไม่พอ") ? "สินค้าไม่พอ" : "บันทึกออเดอร์ไม่สำเร็จ: " + error.message, "error"); return; }
 
     await refreshAllData();
     renderPage("sales-entry");
@@ -959,17 +940,8 @@
     const amount = Number(document.getElementById("quick-amount").value);
     const note = document.getElementById("quick-note").value.trim();
     if(!amount || amount < 1){ showToast("กรอกยอดขายให้ถูกต้อง", "error"); return; }
-    const session = data.liveSessions.find(s => s.id === sessionId);
-    const { error } = await sb.from("orders").insert({
-      live_session_id: sessionId,
-      employee_id: currentEmployee.id,
-      platform: session.platform,
-      product_id: null,
-      product_name: "ยอดขายรวม (ไม่ระบุสินค้า)",
-      qty: null,
-      price_per_unit: null,
-      total: amount,
-      customer_name: note
+    const { error } = await sb.rpc("rpc_add_quick_order", {
+      p_code: myCode, p_session_id: sessionId, p_amount: amount, p_note: note
     });
     if(error){ showToast("บันทึกยอดรวมไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
@@ -1123,10 +1095,9 @@
       showToast("กรอกชื่อ ราคา และจำนวนคงเหลือให้ครบและถูกต้อง", "error");
       return;
     }
-    const payload = { name, price, stock_qty: stockQty };
-    const { error } = id
-      ? await sb.from("products").update(payload).eq("id", Number(id))
-      : await sb.from("products").insert(payload);
+    const { error } = await sb.rpc("rpc_upsert_product", {
+      p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_price: price, p_stock: stockQty
+    });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     closeProductModal();
@@ -1191,19 +1162,19 @@
   }
 
   async function saveCommissionTiers(){
-    const updates = data.commissionTiers.map(t => {
+    const tiers = data.commissionTiers.map(t => {
       const minVal = document.getElementById(`tier-min-${t.id}`).value;
       const maxVal = document.getElementById(`tier-max-${t.id}`).value;
       const rateVal = document.getElementById(`tier-rate-${t.id}`).value;
-      return sb.from("commission_tiers").update({
-        min_sales: minVal === "" ? null : Number(minVal),
-        max_sales: maxVal === "" ? null : Number(maxVal),
-        rate_percent: rateVal === "" ? 0 : Number(rateVal)
-      }).eq("id", t.id);
+      return {
+        id: t.id,
+        minSales: minVal === "" ? null : Number(minVal),
+        maxSales: maxVal === "" ? null : Number(maxVal),
+        ratePercent: rateVal === "" ? 0 : Number(rateVal)
+      };
     });
-    const results = await Promise.all(updates);
-    const failed = results.find(r => r.error);
-    if(failed){ showToast("บันทึกไม่สำเร็จ: " + failed.error.message, "error"); return; }
+    const { error } = await sb.rpc("rpc_save_tiers", { p_code: myCode, p_tiers: tiers });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     renderPage("payroll");
   }
@@ -1233,24 +1204,25 @@
       <div class="meta" style="margin-top:14px;">เงินเดือนฐาน ฿${emp.baseSalary.toLocaleString()} + ค่าคอม ฿${commission.toLocaleString()} − เงินหัก ฿${deduction.toLocaleString()} = สุทธิ ฿${net.toLocaleString()}</div>`;
   }
 
-  // init: load from Supabase, then keep session across refresh
+  // init: restore session (if any) via a fresh PIN check, otherwise show login
   (async function init(){
     const btn = document.querySelector("#login-screen button");
     const input = document.getElementById("pin-input");
-    btn.disabled = true; input.disabled = true; btn.textContent = "กำลังเชื่อมต่อ...";
-    try {
-      await refreshAllData();
-    } catch(err){
-      document.getElementById("login-error").textContent = "เชื่อมต่อฐานข้อมูลไม่ได้ ลองรีเฟรชหน้าใหม่";
-      btn.textContent = "เข้าสู่ระบบ";
-      return;
-    }
-    btn.disabled = false; input.disabled = false; btn.textContent = "เข้าสู่ระบบ";
-
     const sessionCode = sessionStorage.getItem(SESSION_KEY);
     if(sessionCode){
-      const emp = data.employees.find(e => e.code === sessionCode);
-      if(emp){ await enterApp(emp); return; }
+      btn.disabled = true; input.disabled = true; btn.textContent = "กำลังเชื่อมต่อ...";
+      try {
+        const me = await bootstrapWithCode(sessionCode);
+        if(me){
+          myCode = sessionCode;
+          currentEmployee = me;
+          btn.disabled = false; input.disabled = false; btn.textContent = "เข้าสู่ระบบ";
+          await enterApp();
+          return;
+        }
+      } catch(err){ /* fall through to login screen */ }
+      sessionStorage.removeItem(SESSION_KEY);
+      btn.disabled = false; input.disabled = false; btn.textContent = "เข้าสู่ระบบ";
     }
     input.addEventListener("keydown", e => {
       if(e.key === "Enter") attemptLogin();
