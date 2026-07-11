@@ -108,6 +108,7 @@
   table{width:100%;border-collapse:collapse;}
   th,td{padding:12px 14px;text-align:left;font-size:14px;border-bottom:1px solid var(--border);}
   th{color:var(--text-sub);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;}
+  td.money{text-align:right;font-family:"Bai Jamjuree";}
   .btn{
     border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;
     background:var(--accent);color:#fff;
@@ -501,21 +502,28 @@
     if(isOwner){
       const todayByPlatform = salesByPlatform(todayOrders);
       const monthByPlatform = salesByPlatform(monthOrders);
+      const salesByEmployeeToday = {};
+      todayOrders.forEach(o => { salesByEmployeeToday[o.employeeId] = (salesByEmployeeToday[o.employeeId] || 0) + o.total; });
+      const salesByEmployeeMonth = {};
+      monthOrders.forEach(o => { salesByEmployeeMonth[o.employeeId] = (salesByEmployeeMonth[o.employeeId] || 0) + o.total; });
+
       const rows = data.employees.filter(e => e.role === "staff").map(e => `
         <tr>
           <td>${e.name}</td>
           <td><span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span></td>
           <td><span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span></td>
+          <td class="money">฿${(salesByEmployeeToday[e.id] || 0).toLocaleString()}</td>
+          <td class="money">฿${(salesByEmployeeMonth[e.id] || 0).toLocaleString()}</td>
         </tr>`).join("");
       return `
-        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายวันนี้</h3>
+        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายวันนี้ (รวมทุกคนต่อแพลตฟอร์ม)</h3>
           <div class="grid cols-3">
             <div><div class="stat-label">TikTok</div><div class="stat-value">฿${todayByPlatform.tiktok.toLocaleString()}</div></div>
             <div><div class="stat-label">Shopee</div><div class="stat-value">฿${todayByPlatform.shopee.toLocaleString()}</div></div>
             <div><div class="stat-label">รวม</div><div class="stat-value">฿${todayTotal.toLocaleString()}</div></div>
           </div>
         </div>
-        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายเดือนนี้</h3>
+        <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายเดือนนี้ (รวมทุกคนต่อแพลตฟอร์ม)</h3>
           <div class="grid cols-3">
             <div><div class="stat-label">TikTok</div><div class="stat-value">฿${monthByPlatform.tiktok.toLocaleString()}</div></div>
             <div><div class="stat-label">Shopee</div><div class="stat-value">฿${monthByPlatform.shopee.toLocaleString()}</div></div>
@@ -527,8 +535,8 @@
           ${recentSessionsHtml(visibleSessions, true)}
         </div>
         <div class="card">
-          <h3 style="margin-top:0;">ทีมไลฟ์ (เจ้าของเห็นทุกคน)</h3>
-          <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th></tr></thead><tbody>${rows}</tbody></table>
+          <h3 style="margin-top:0;">ยอดขายรายคน (แยกเป็นคนๆ ไม่ปนกันแม้อยู่แพลตฟอร์มเดียวกัน)</h3>
+          <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th><th>ยอดวันนี้</th><th>ยอดเดือนนี้</th></tr></thead><tbody>${rows}</tbody></table>
         </div>`;
     }
 
