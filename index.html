@@ -365,6 +365,8 @@
   let data = { employees: [], commissionTiers: [], liveSessions: [], products: [], orders: [] };
   let currentEmployee = null;
   let myCode = null;
+  let dashboardRangeStart = null;
+  let dashboardRangeEnd = null;
 
   function mapEmployee(r){
     return {
@@ -519,6 +521,64 @@
     return orders.reduce((acc,o) => { acc[o.platform] = (acc[o.platform]||0) + o.total; return acc; }, {tiktok:0, shopee:0});
   }
 
+  function commissionForEmployee(emp, totalSales){
+    if(emp.employmentType !== "full-time") return null;
+    const tier = findMatchingTier(totalSales);
+    return tier ? totalSales * tier.ratePercent / 100 : 0;
+  }
+  function defaultDashboardRangeStart(){
+    const d = new Date(); d.setDate(1);
+    return d.toISOString().slice(0,10);
+  }
+  function defaultDashboardRangeEnd(){
+    return new Date().toISOString().slice(0,10);
+  }
+  function renderDashboardRangeResult(startDate, endDate){
+    const isOwner = currentEmployee.role === "owner";
+    const baseOrders = isOwner ? data.orders : data.orders.filter(o => o.employeeId === currentEmployee.id);
+    const rangeOrders = baseOrders.filter(o => {
+      const d = o.timestamp.slice(0,10);
+      return d >= startDate && d <= endDate;
+    });
+    const byPlatform = salesByPlatform(rangeOrders);
+    const total = rangeOrders.reduce((s,o) => s + o.total, 0);
+    let peopleTable = "";
+    if(isOwner){
+      const byEmployee = {};
+      rangeOrders.forEach(o => { byEmployee[o.employeeId] = (byEmployee[o.employeeId] || 0) + o.total; });
+      const rows = data.employees.filter(e => e.role === "staff").map(e => {
+        const empTotal = byEmployee[e.id] || 0;
+        const commission = commissionForEmployee(e, empTotal);
+        return `
+          <tr>
+            <td>${e.name}</td>
+            <td><span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span></td>
+            <td class="money">฿${empTotal.toLocaleString()}</td>
+            <td class="money">${commission === null ? "-" : "฿" + commission.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+          </tr>`;
+      }).join("");
+      peopleTable = `
+        <table style="margin-top:14px;"><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ยอดขายช่วงนี้</th><th>ค่าคอมประมาณการ</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="meta" style="margin-top:8px;">*ค่าคอมประมาณการคำนวณจากยอดขายรวมเฉพาะช่วงที่เลือก เทียบกับตารางขั้นบันได ใช้ดูภาพรวมเท่านั้น — ยอดค่าคอมจริงคำนวณจากยอดขายรวมทั้งเดือนปฏิทินที่หน้า "เงินเดือน & ค่าคอม"</p>`;
+    }
+    return `
+      <div class="grid cols-3" style="margin-top:14px;">
+        <div><div class="stat-label">TikTok</div><div class="stat-value">฿${byPlatform.tiktok.toLocaleString()}</div></div>
+        <div><div class="stat-label">Shopee</div><div class="stat-value">฿${byPlatform.shopee.toLocaleString()}</div></div>
+        <div><div class="stat-label">รวม</div><div class="stat-value">฿${total.toLocaleString()}</div></div>
+      </div>
+      ${peopleTable}`;
+  }
+  function applyDashboardRange(){
+    const start = document.getElementById("dash-range-start").value;
+    const end = document.getElementById("dash-range-end").value;
+    if(!start || !end){ showToast("เลือกวันที่ให้ครบ", "error"); return; }
+    if(start > end){ showToast("วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด", "error"); return; }
+    dashboardRangeStart = start;
+    dashboardRangeEnd = end;
+    document.getElementById("dashboard-range-result").innerHTML = renderDashboardRangeResult(start, end);
+  }
+
   function recentSessionsHtml(sessions, showEmployeeName){
     const statusClassMap = {"นัดหมาย":"scheduled","กำลังไลฟ์":"live","จบแล้ว":"done"};
     return sessions.slice().sort((a,b) => (b.date+b.startTime).localeCompare(a.date+a.startTime)).slice(0,5).map(s => {
@@ -551,14 +611,21 @@
       const salesByEmployeeMonth = {};
       monthOrders.forEach(o => { salesByEmployeeMonth[o.employeeId] = (salesByEmployeeMonth[o.employeeId] || 0) + o.total; });
 
-      const rows = data.employees.filter(e => e.role === "staff").map(e => `
+      const rows = data.employees.filter(e => e.role === "staff").map(e => {
+        const monthTotalForEmp = salesByEmployeeMonth[e.id] || 0;
+        const commission = commissionForEmployee(e, monthTotalForEmp);
+        return `
         <tr>
           <td>${e.name}</td>
           <td><span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span></td>
           <td><span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span></td>
           <td class="money">฿${(salesByEmployeeToday[e.id] || 0).toLocaleString()}</td>
-          <td class="money">฿${(salesByEmployeeMonth[e.id] || 0).toLocaleString()}</td>
-        </tr>`).join("");
+          <td class="money">฿${monthTotalForEmp.toLocaleString()}</td>
+          <td class="money">${commission === null ? "-" : "฿" + commission.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+        </tr>`;
+      }).join("");
+      if(!dashboardRangeStart) dashboardRangeStart = defaultDashboardRangeStart();
+      if(!dashboardRangeEnd) dashboardRangeEnd = defaultDashboardRangeEnd();
       return `
         <div class="card"><h3 style="margin-top:0;margin-bottom:14px;">ยอดขายวันนี้ (รวมทุกคนต่อแพลตฟอร์ม)</h3>
           <div class="grid cols-3">
@@ -580,7 +647,17 @@
         </div>
         <div class="card">
           <h3 style="margin-top:0;">ยอดขายรายคน (แยกเป็นคนๆ ไม่ปนกันแม้อยู่แพลตฟอร์มเดียวกัน)</h3>
-          <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th><th>ยอดวันนี้</th><th>ยอดเดือนนี้</th></tr></thead><tbody>${rows}</tbody></table>
+          <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th><th>ยอดวันนี้</th><th>ยอดเดือนนี้</th><th>ค่าคอม (เดือนนี้)</th></tr></thead><tbody>${rows}</tbody></table>
+          <p class="meta" style="margin-top:8px;">*ค่าคอมคิดเฉพาะพนักงานประจำ TikTok จากยอดขายรวมทั้งเดือนเทียบกับตารางขั้นบันได</p>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">เลือกช่วงวันที่เอง</h3>
+          <div class="grid cols-3" style="align-items:end;">
+            <div class="field"><label>จากวันที่</label><input type="date" id="dash-range-start" value="${dashboardRangeStart}"></div>
+            <div class="field"><label>ถึงวันที่</label><input type="date" id="dash-range-end" value="${dashboardRangeEnd}"></div>
+            <div class="field"><button class="btn" onclick="applyDashboardRange()">ใช้ช่วงนี้</button></div>
+          </div>
+          <div id="dashboard-range-result">${renderDashboardRangeResult(dashboardRangeStart, dashboardRangeEnd)}</div>
         </div>`;
     }
 
