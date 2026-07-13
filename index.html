@@ -102,6 +102,7 @@
   .chip.tiktok{background:#000;color:#fff;}
   .chip.shopee{background:var(--shopee);color:#fff;}
   .chip.owner{background:var(--accent-soft);color:var(--accent);}
+  .chip.neutral{background:var(--bg);color:var(--text-sub);}
   .chip.full{background:#e7f6ec;color:var(--success);}
   .chip.part{background:#fdf1e0;color:var(--warn);}
 
@@ -129,7 +130,7 @@
     align-items:center;justify-content:center;z-index:50;padding:20px;
   }
   .modal-overlay.active{display:flex;}
-  .modal{background:#fff;border-radius:14px;padding:26px;width:100%;max-width:400px;}
+  .modal{background:#fff;border-radius:14px;padding:26px;width:100%;max-width:400px;max-height:88vh;overflow-y:auto;}
   .modal h3{margin:0 0 18px;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12.5px;color:var(--text-sub);margin-bottom:5px;font-weight:600;}
@@ -276,6 +277,19 @@
           </select>
         </div>
         <div class="field" id="emp-salary-field"><label>เงินเดือนฐาน (บาท)</label><input id="emp-salary" type="number"></div>
+        <div class="field" id="emp-payment-freq-field"><label>ความถี่รับเงิน</label>
+          <select id="emp-payment-freq">
+            <option value="daily">รายวัน</option>
+            <option value="weekly">รายสัปดาห์</option>
+          </select>
+        </div>
+        <div class="field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+          <label style="font-size:13px;color:var(--text);">ข้อมูลเบื้องต้น (สำหรับ HR/จ่ายเงิน)</label>
+        </div>
+        <div class="field"><label>เลขบัตรประชาชน</label><input id="emp-idcard" maxlength="13" placeholder="13 หลัก"></div>
+        <div class="field"><label>ธนาคาร</label><input id="emp-bank-name" placeholder="เช่น กสิกรไทย"></div>
+        <div class="field"><label>เลขบัญชีธนาคาร</label><input id="emp-bank-account" placeholder="เลขที่บัญชี"></div>
+        <div class="field"><label>ชื่อบัญชี</label><input id="emp-bank-account-name" placeholder="ชื่อเจ้าของบัญชี"></div>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" onclick="closeEmpModal()">ยกเลิก</button>
@@ -346,7 +360,15 @@
   let currentEmployee = null;
   let myCode = null;
 
-  function mapEmployee(r){ return {id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform, employmentType:r.employment_type, baseSalary:r.base_salary}; }
+  function mapEmployee(r){
+    return {
+      id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform,
+      employmentType:r.employment_type, baseSalary:r.base_salary,
+      idCardNumber:r.id_card_number, bankName:r.bank_name,
+      bankAccountNumber:r.bank_account_number, bankAccountName:r.bank_account_name,
+      paymentFrequency:r.payment_frequency
+    };
+  }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
   function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty}; }
   function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time}; }
@@ -576,10 +598,10 @@
     const rows = data.employees.map(e => `
       <tr>
         <td>${e.name}</td>
-        <td>${e.code}</td>
+        <td>${e.code || "-"}</td>
         <td>${e.role === "owner" ? '<span class="chip owner">เจ้าของ</span>' : `<span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>`}</td>
         <td>${e.employmentType ? `<span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>` : "-"}</td>
-        <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : "-"}</td>
+        <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : (e.paymentFrequency ? `<span class="chip neutral">${e.paymentFrequency === "daily" ? "รายวัน" : "รายสัปดาห์"}</span>` : "-")}</td>
         <td><button class="btn ghost sm" onclick="openEmpModal(${e.id})">แก้ไข</button></td>
       </tr>`).join("");
     return `
@@ -588,8 +610,9 @@
           <h3 style="margin:0;">รายชื่อผู้ใช้ระบบ</h3>
           <button class="btn" onclick="openEmpModal()">+ เพิ่มพนักงาน</button>
         </div>
+        <p class="meta" style="margin-top:-8px;">เลขบัตรประชาชน/บัญชีธนาคารดูและแก้ไขได้ในหน้าต่างแก้ไขพนักงาน (ไม่โชว์ในตารางเพื่อความเป็นส่วนตัว)</p>
         <table>
-          <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือนฐาน</th><th></th></tr></thead>
+          <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือน/ค่าจ้าง</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
@@ -602,6 +625,7 @@
   function toggleSalaryField(){
     const isFull = document.getElementById("emp-employment").value === "full-time";
     document.getElementById("emp-salary-field").style.display = isFull ? "block" : "none";
+    document.getElementById("emp-payment-freq-field").style.display = isFull ? "none" : "block";
   }
 
   function openEmpModal(id){
@@ -616,6 +640,11 @@
       document.getElementById("emp-platform").value = e.platform === "both" ? "tiktok" : e.platform;
       document.getElementById("emp-employment").value = e.employmentType || "full-time";
       document.getElementById("emp-salary").value = e.baseSalary || "";
+      document.getElementById("emp-payment-freq").value = e.paymentFrequency || "daily";
+      document.getElementById("emp-idcard").value = e.idCardNumber || "";
+      document.getElementById("emp-bank-name").value = e.bankName || "";
+      document.getElementById("emp-bank-account").value = e.bankAccountNumber || "";
+      document.getElementById("emp-bank-account-name").value = e.bankAccountName || "";
     } else {
       document.getElementById("emp-modal-title").textContent = "เพิ่มพนักงาน";
       document.getElementById("emp-id").value = "";
@@ -625,6 +654,11 @@
       document.getElementById("emp-platform").value = "tiktok";
       document.getElementById("emp-employment").value = "full-time";
       document.getElementById("emp-salary").value = "";
+      document.getElementById("emp-payment-freq").value = "daily";
+      document.getElementById("emp-idcard").value = "";
+      document.getElementById("emp-bank-name").value = "";
+      document.getElementById("emp-bank-account").value = "";
+      document.getElementById("emp-bank-account-name").value = "";
     }
     toggleEmpFields();
     toggleSalaryField();
@@ -643,14 +677,22 @@
     const codeClash = data.employees.find(e => e.code === code && String(e.id) !== String(id));
     if(codeClash){ showToast("รหัส PIN นี้ถูกใช้แล้วโดย " + codeClash.name, "error"); return; }
 
-    const platform = role === "owner" ? "both" : document.getElementById("emp-platform").value;
     const employmentType = role === "owner" ? null : document.getElementById("emp-employment").value;
+    const platform = role === "owner" ? "both" : document.getElementById("emp-platform").value;
     const baseSalary = role === "owner" ? null :
-      (document.getElementById("emp-employment").value === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null);
+      (employmentType === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null);
+    const paymentFrequency = role === "owner" ? null :
+      (employmentType === "part-time" ? document.getElementById("emp-payment-freq").value : null);
+    const idCardNumber = role === "owner" ? null : (document.getElementById("emp-idcard").value.trim() || null);
+    const bankName = role === "owner" ? null : (document.getElementById("emp-bank-name").value.trim() || null);
+    const bankAccountNumber = role === "owner" ? null : (document.getElementById("emp-bank-account").value.trim() || null);
+    const bankAccountName = role === "owner" ? null : (document.getElementById("emp-bank-account-name").value.trim() || null);
 
     const { error } = await sb.rpc("rpc_upsert_employee", {
       p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_emp_code: code,
-      p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary
+      p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary,
+      p_id_card_number: idCardNumber, p_bank_name: bankName, p_bank_account_number: bankAccountNumber,
+      p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
 
