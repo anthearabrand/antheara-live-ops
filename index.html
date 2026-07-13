@@ -160,6 +160,22 @@
   .tab-btn{border:1px solid var(--border);background:#fff;color:var(--text-sub);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:600;}
   .tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 
+  .calendar-header{display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:14px;font-family:"Bai Jamjuree";font-size:16px;}
+  .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .calendar-weekday{text-align:center;font-size:12px;color:var(--text-sub);font-weight:600;padding:4px 0;}
+  .calendar-day{min-height:92px;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;overflow:hidden;}
+  .calendar-day.other-month{background:transparent;border-color:transparent;}
+  .calendar-day.today{border-color:var(--accent);background:var(--accent-soft);}
+  .calendar-day .day-num{font-size:12px;color:var(--text-sub);margin-bottom:4px;font-weight:600;}
+  .session-pill{font-size:10.5px;padding:2px 5px;border-radius:5px;margin-bottom:3px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .session-pill.tiktok{background:#000;}
+  .session-pill.shopee{background:var(--shopee);}
+  @media (max-width:700px){
+    .calendar-day{min-height:64px;padding:4px;}
+    .calendar-day .day-num{font-size:10.5px;}
+    .session-pill{font-size:9px;padding:1px 3px;}
+  }
+
   .summary-layout{display:grid;grid-template-columns:260px 1fr;gap:18px;align-items:start;}
   .summary-list{padding:10px;}
   .summary-row{padding:12px 14px;border-radius:10px;cursor:pointer;margin-bottom:4px;}
@@ -696,8 +712,21 @@
 
   // ===== live schedule =====
   let scheduleFilterPlatform = "all";
+  let scheduleViewMode = "list";
+  let calendarMonth = new Date().toISOString().slice(0,7);
+
   function setScheduleFilter(p){
     scheduleFilterPlatform = p;
+    renderPage("live-schedule");
+  }
+  function setScheduleViewMode(mode){
+    scheduleViewMode = mode;
+    renderPage("live-schedule");
+  }
+  function shiftCalendarMonth(delta){
+    const [y,m] = calendarMonth.split("-").map(Number);
+    const d = new Date(y, m-1+delta, 1);
+    calendarMonth = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
     renderPage("live-schedule");
   }
 
@@ -707,8 +736,12 @@
       sessions = sessions.filter(s => s.platform === scheduleFilterPlatform);
     }
     sessions.sort((a,b) => (b.date+b.startTime).localeCompare(a.date+a.startTime));
-    const rows = sessions.map(s => sessionCardHtml(s)).join("") ||
-      `<div class="empty-note"><span class="icon">🎥</span>ยังไม่มีตารางไลฟ์ในหมวดนี้ กด "+ นัดหมายไลฟ์ใหม่" เพื่อเริ่มลงตาราง</div>`;
+
+    const body = scheduleViewMode === "calendar"
+      ? renderCalendarView(sessions)
+      : (sessions.map(s => sessionCardHtml(s)).join("") ||
+         `<div class="empty-note"><span class="icon">🎥</span>ยังไม่มีตารางไลฟ์ในหมวดนี้ กด "+ นัดหมายไลฟ์ใหม่" เพื่อเริ่มลงตาราง</div>`);
+
     return `
       <div class="card">
         <div class="toolbar">
@@ -716,11 +749,61 @@
           <button class="btn" onclick="openSessionModal()">+ นัดหมายไลฟ์ใหม่</button>
         </div>
         <div class="tab-bar">
+          <button class="tab-btn ${scheduleViewMode === "list" ? "active" : ""}" onclick="setScheduleViewMode('list')">📋 รายการ</button>
+          <button class="tab-btn ${scheduleViewMode === "calendar" ? "active" : ""}" onclick="setScheduleViewMode('calendar')">📅 ปฏิทิน</button>
+        </div>
+        <div class="tab-bar">
           <button class="tab-btn ${scheduleFilterPlatform === "all" ? "active" : ""}" onclick="setScheduleFilter('all')">ทั้งหมด</button>
           <button class="tab-btn ${scheduleFilterPlatform === "tiktok" ? "active" : ""}" onclick="setScheduleFilter('tiktok')">TikTok</button>
           <button class="tab-btn ${scheduleFilterPlatform === "shopee" ? "active" : ""}" onclick="setScheduleFilter('shopee')">Shopee</button>
         </div>
-        ${rows}
+        ${body}
+      </div>`;
+  }
+
+  function renderCalendarView(sessions){
+    const [year, monthNum] = calendarMonth.split("-").map(Number);
+    const firstDay = new Date(year, monthNum-1, 1);
+    const daysInMonth = new Date(year, monthNum, 0).getDate();
+    const startWeekday = firstDay.getDay();
+    const todayStr = new Date().toISOString().slice(0,10);
+    const monthLabel = firstDay.toLocaleDateString("th-TH", {month:"long", year:"numeric"});
+
+    const sessionsByDate = {};
+    sessions.forEach(s => {
+      if(!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
+      sessionsByDate[s.date].push(s);
+    });
+
+    const statusDot = {"นัดหมาย":"⚪","กำลังไลฟ์":"🔴","จบแล้ว":"🟢"};
+    let cells = "";
+    for(let i=0;i<startWeekday;i++) cells += `<div class="calendar-day other-month"></div>`;
+    for(let day=1; day<=daysInMonth; day++){
+      const dateStr = `${year}-${String(monthNum).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      const daySessions = (sessionsByDate[dateStr] || []).slice().sort((a,b) => a.startTime.localeCompare(b.startTime));
+      const isToday = dateStr === todayStr;
+      const pills = daySessions.map(s => {
+        const emp = getEmployeeById(s.employeeId);
+        const empName = emp ? emp.name : "-";
+        return `<div class="session-pill ${s.platform}" title="${empName} · ${s.startTime}-${s.endTime} · ${s.status}">${statusDot[s.status]} ${s.startTime} ${platformLabel(s.platform)}</div>`;
+      }).join("");
+      cells += `<div class="calendar-day ${isToday ? "today" : ""}">
+        <div class="day-num">${day}</div>
+        ${pills}
+      </div>`;
+    }
+
+    const weekdayLabels = ["อา","จ","อ","พ","พฤ","ศ","ส"].map(d => `<div class="calendar-weekday">${d}</div>`).join("");
+
+    return `
+      <div class="calendar-header">
+        <button class="btn ghost sm" onclick="shiftCalendarMonth(-1)">‹</button>
+        <b>${monthLabel}</b>
+        <button class="btn ghost sm" onclick="shiftCalendarMonth(1)">›</button>
+      </div>
+      <div class="calendar-grid">
+        ${weekdayLabels}
+        ${cells}
       </div>`;
   }
 
