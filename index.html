@@ -410,7 +410,8 @@
     {id:"stock", icon:"📦", label:"สต๊อกสินค้า", roles:["owner","staff"]},
     {id:"my-profile", icon:"🪪", label:"ข้อมูลส่วนตัว", roles:["staff"]},
     {id:"payroll", icon:"💰", label:"เงินเดือน & ค่าคอม", roles:["owner"]},
-    {id:"employees", icon:"👥", label:"จัดการพนักงาน", roles:["owner"]}
+    {id:"employees", icon:"👥", label:"จัดการพนักงาน", roles:["owner"]},
+    {id:"hr-profiles", icon:"🪪", label:"ข้อมูลพนักงาน (HR)", roles:["owner"]}
   ];
 
   let currentPage = "dashboard";
@@ -507,6 +508,7 @@
     if(pageId === "stock"){ el.innerHTML = renderStock(); return; }
     if(pageId === "payroll"){ el.innerHTML = renderPayroll(); return; }
     if(pageId === "my-profile"){ el.innerHTML = renderMyProfile(); return; }
+    if(pageId === "hr-profiles"){ el.innerHTML = renderHrProfiles(); return; }
     el.innerHTML = renderPlaceholder(pageId);
   }
 
@@ -701,12 +703,49 @@
           <h3 style="margin:0;">รายชื่อผู้ใช้ระบบ</h3>
           <button class="btn" onclick="openEmpModal()">+ เพิ่มพนักงาน</button>
         </div>
-        <p class="meta" style="margin-top:-8px;">เลขบัตรประชาชน/บัญชีธนาคารดูและแก้ไขได้ในหน้าต่างแก้ไขพนักงาน (ไม่โชว์ในตารางเพื่อความเป็นส่วนตัว)</p>
+        <p class="meta" style="margin-top:-8px;">เลขบัตรประชาชน/บัญชีธนาคารดูและแก้ไขได้ในหน้าต่างแก้ไขพนักงาน หรือดูรวมทุกคนได้ที่เมนู "ข้อมูลพนักงาน (HR)" (ไม่โชว์ในตารางนี้เพื่อความเป็นส่วนตัว)</p>
         <table>
           <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือน/ค่าจ้าง</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+  }
+
+  function renderHrProfiles(){
+    const staff = data.employees.filter(e => e.role === "staff");
+    if(staff.length === 0){
+      return `<div class="card"><p class="meta">ยังไม่มีพนักงานในระบบ</p></div>`;
+    }
+    const cards = staff.map(e => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="margin:0 0 6px;">${e.name}</h3>
+            <span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>
+            <span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>
+          </div>
+          ${isProfileComplete(e)
+            ? `<span class="chip full">ข้อมูลครบ ✓</span>`
+            : `<span class="chip part">⚠️ ข้อมูลไม่ครบ</span>`}
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;align-items:flex-start;">
+          ${e.idCardPhoto
+            ? `<img src="${e.idCardPhoto}" style="width:160px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+            : `<div class="meta" style="color:var(--danger);width:160px;">ยังไม่มีรูปบัตรประชาชน</div>`}
+          <div class="meta" style="line-height:1.9;">
+            ที่อยู่จัดส่ง: ${e.address || "-"}<br>
+            เลขบัตรประชาชน: ${e.idCardNumber || "-"}<br>
+            ธนาคาร: ${e.bankName || "-"}<br>
+            เลขบัญชี: ${e.bankAccountNumber || "-"}<br>
+            ชื่อบัญชี: ${e.bankAccountName || "-"}
+          </div>
+        </div>
+      </div>`).join("");
+    return `
+      <div class="card" style="margin-bottom:0;padding-bottom:0;border:none;box-shadow:none;background:transparent;">
+        <p class="meta" style="padding:0 0 14px;">ข้อมูลนี้พนักงานกรอกเองที่หน้า "ข้อมูลส่วนตัว" — ใช้ดูสำหรับจัดส่งของและทำจ่ายเงินเดือน</p>
+      </div>
+      ${cards}`;
   }
 
   function toggleEmpFields(){
