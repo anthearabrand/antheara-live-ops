@@ -374,7 +374,7 @@
       employmentType:r.employment_type, baseSalary:r.base_salary,
       idCardNumber:r.id_card_number, idCardPhoto:r.id_card_photo, bankName:r.bank_name,
       bankAccountNumber:r.bank_account_number, bankAccountName:r.bank_account_name,
-      paymentFrequency:r.payment_frequency
+      paymentFrequency:r.payment_frequency, address:r.address
     };
   }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
@@ -408,6 +408,7 @@
     {id:"sales-entry", icon:"🛒", label:"บันทึกยอดขาย", roles:["owner","staff"]},
     {id:"live-summary", icon:"📋", label:"สรุปผลไลฟ์", roles:["owner","staff"]},
     {id:"stock", icon:"📦", label:"สต๊อกสินค้า", roles:["owner","staff"]},
+    {id:"my-profile", icon:"🪪", label:"ข้อมูลส่วนตัว", roles:["staff"]},
     {id:"payroll", icon:"💰", label:"เงินเดือน & ค่าคอม", roles:["owner"]},
     {id:"employees", icon:"👥", label:"จัดการพนักงาน", roles:["owner"]}
   ];
@@ -505,6 +506,7 @@
     if(pageId === "live-summary"){ el.innerHTML = renderLiveSummary(); return; }
     if(pageId === "stock"){ el.innerHTML = renderStock(); return; }
     if(pageId === "payroll"){ el.innerHTML = renderPayroll(); return; }
+    if(pageId === "my-profile"){ el.innerHTML = renderMyProfile(); return; }
     el.innerHTML = renderPlaceholder(pageId);
   }
 
@@ -666,6 +668,12 @@
         <h3 style="margin-top:0;">สวัสดี ${currentEmployee.name}</h3>
         <p style="color:var(--text-sub);">คุณเห็นเฉพาะข้อมูลของตัวเองเท่านั้น — ${roleLabel(currentEmployee)}</p>
       </div>
+      ${!isProfileComplete(currentEmployee) ? `
+      <div class="card" style="border:1px solid var(--warn);background:#fffaf0;">
+        <h3 style="margin-top:0;color:var(--warn);">⚠️ กรอกข้อมูลส่วนตัวยังไม่ครบ</h3>
+        <p class="meta">กรุณากรอกที่อยู่/เลขบัตรประชาชน/รูปบัตร/บัญชีธนาคารให้ครบที่หน้า "ข้อมูลส่วนตัว" เพื่อใช้ส่งของและทำจ่ายเงินเดือน</p>
+        <button class="btn" onclick="goToPage('my-profile')">ไปกรอกข้อมูล</button>
+      </div>` : ""}
       <div class="grid cols-3">
         <div class="card"><div class="stat-label">ยอดขายวันนี้</div><div class="stat-value">฿${todayTotal.toLocaleString()}</div></div>
         <div class="card"><div class="stat-label">ยอดขายเดือนนี้</div><div class="stat-value">฿${monthTotal.toLocaleString()}</div></div>
@@ -803,6 +811,70 @@
     await refreshAllData();
     closeEmpModal();
     renderPage("employees");
+  }
+
+  // ===== my profile (self-service, staff only) =====
+  let pendingMyIdCardPhoto = null;
+
+  function isProfileComplete(e){
+    return !!(e.address && e.idCardNumber && e.idCardPhoto && e.bankName && e.bankAccountNumber && e.bankAccountName);
+  }
+
+  function renderMyProfile(){
+    const e = currentEmployee;
+    pendingMyIdCardPhoto = e.idCardPhoto || null;
+    return `
+      <div class="card">
+        <h3 style="margin-top:0;">ข้อมูลส่วนตัวของฉัน</h3>
+        <p class="meta" style="margin-top:-8px;margin-bottom:14px;">กรอกไว้ให้ครบสำหรับใช้ส่งของและทำจ่ายเงินเดือน — เห็นเฉพาะเจ้าของร้านและตัวคุณเองเท่านั้น</p>
+        <div class="field"><label>ที่อยู่ (สำหรับจัดส่งของ)</label><textarea id="my-address" rows="3" placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต จังหวัด รหัสไปรษณีย์">${e.address || ""}</textarea></div>
+        <div class="field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+          <label style="font-size:13px;color:var(--text);">ข้อมูลเบื้องต้น (สำหรับ HR/จ่ายเงิน)</label>
+        </div>
+        <div class="field"><label>เลขบัตรประชาชน</label><input id="my-idcard" maxlength="13" placeholder="13 หลัก" value="${e.idCardNumber || ""}"></div>
+        <div class="field">
+          <label>รูปบัตรประชาชน</label>
+          <div id="my-idcard-photo-preview" style="margin-bottom:8px;">${e.idCardPhoto
+            ? `<img src="${e.idCardPhoto}" style="width:140px;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+            : `<span class="meta">ยังไม่มีรูปแนบ</span>`}</div>
+          <input type="file" id="my-idcard-photo-input" accept="image/*" style="display:none" onchange="handleMyIdCardPhoto(event)">
+          <button type="button" class="btn ghost sm" onclick="document.getElementById('my-idcard-photo-input').click()">📷 แนบ/เปลี่ยนรูปบัตรประชาชน</button>
+        </div>
+        <div class="field"><label>ธนาคาร</label><input id="my-bank-name" placeholder="เช่น กสิกรไทย" value="${e.bankName || ""}"></div>
+        <div class="field"><label>เลขบัญชีธนาคาร</label><input id="my-bank-account" placeholder="เลขที่บัญชี" value="${e.bankAccountNumber || ""}"></div>
+        <div class="field"><label>ชื่อบัญชี</label><input id="my-bank-account-name" placeholder="ชื่อเจ้าของบัญชี" value="${e.bankAccountName || ""}"></div>
+        <button class="btn" style="margin-top:6px;" onclick="saveMyProfile()">บันทึกข้อมูล</button>
+      </div>`;
+  }
+
+  function handleMyIdCardPhoto(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    resizeImageFile(file, 800, function(dataUrl){
+      pendingMyIdCardPhoto = dataUrl;
+      document.getElementById("my-idcard-photo-preview").innerHTML =
+        `<img src="${dataUrl}" style="width:140px;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`;
+    });
+    event.target.value = "";
+  }
+
+  async function saveMyProfile(){
+    const address = document.getElementById("my-address").value.trim() || null;
+    const idCardNumber = document.getElementById("my-idcard").value.trim() || null;
+    const bankName = document.getElementById("my-bank-name").value.trim() || null;
+    const bankAccountNumber = document.getElementById("my-bank-account").value.trim() || null;
+    const bankAccountName = document.getElementById("my-bank-account-name").value.trim() || null;
+
+    const { error } = await sb.rpc("rpc_update_my_profile", {
+      p_code: myCode, p_address: address, p_id_card_number: idCardNumber,
+      p_id_card_photo: pendingMyIdCardPhoto, p_bank_name: bankName,
+      p_bank_account_number: bankAccountNumber, p_bank_account_name: bankAccountName
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+
+    await refreshAllData();
+    showToast("บันทึกข้อมูลส่วนตัวเรียบร้อย", "success");
+    renderPage("my-profile");
   }
 
   // ===== helpers =====
