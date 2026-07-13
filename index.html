@@ -290,6 +290,12 @@
         <div class="field"><label>ธนาคาร</label><input id="emp-bank-name" placeholder="เช่น กสิกรไทย"></div>
         <div class="field"><label>เลขบัญชีธนาคาร</label><input id="emp-bank-account" placeholder="เลขที่บัญชี"></div>
         <div class="field"><label>ชื่อบัญชี</label><input id="emp-bank-account-name" placeholder="ชื่อเจ้าของบัญชี"></div>
+        <div class="field">
+          <label>รูปบัตรประชาชน (ใช้ตอนทำจ่าย)</label>
+          <div id="emp-idcard-photo-preview" style="margin-bottom:8px;"></div>
+          <input type="file" id="emp-idcard-photo-input" accept="image/*" style="display:none" onchange="handleEmpIdCardPhoto(event)">
+          <button type="button" class="btn ghost sm" onclick="document.getElementById('emp-idcard-photo-input').click()">📷 แนบ/เปลี่ยนรูปบัตรประชาชน</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" onclick="closeEmpModal()">ยกเลิก</button>
@@ -364,7 +370,7 @@
     return {
       id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform,
       employmentType:r.employment_type, baseSalary:r.base_salary,
-      idCardNumber:r.id_card_number, bankName:r.bank_name,
+      idCardNumber:r.id_card_number, idCardPhoto:r.id_card_photo, bankName:r.bank_name,
       bankAccountNumber:r.bank_account_number, bankAccountName:r.bank_account_name,
       paymentFrequency:r.payment_frequency
     };
@@ -628,6 +634,8 @@
     document.getElementById("emp-payment-freq-field").style.display = isFull ? "none" : "block";
   }
 
+  let pendingEmpIdCardPhoto = null;
+
   function openEmpModal(id){
     const modal = document.getElementById("emp-modal");
     if(id){
@@ -645,6 +653,7 @@
       document.getElementById("emp-bank-name").value = e.bankName || "";
       document.getElementById("emp-bank-account").value = e.bankAccountNumber || "";
       document.getElementById("emp-bank-account-name").value = e.bankAccountName || "";
+      pendingEmpIdCardPhoto = e.idCardPhoto || null;
     } else {
       document.getElementById("emp-modal-title").textContent = "เพิ่มพนักงาน";
       document.getElementById("emp-id").value = "";
@@ -659,10 +668,27 @@
       document.getElementById("emp-bank-name").value = "";
       document.getElementById("emp-bank-account").value = "";
       document.getElementById("emp-bank-account-name").value = "";
+      pendingEmpIdCardPhoto = null;
     }
+    renderEmpIdCardPhotoPreview();
     toggleEmpFields();
     toggleSalaryField();
     modal.classList.add("active");
+  }
+  function renderEmpIdCardPhotoPreview(){
+    const el = document.getElementById("emp-idcard-photo-preview");
+    el.innerHTML = pendingEmpIdCardPhoto
+      ? `<img src="${pendingEmpIdCardPhoto}" style="width:140px;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+      : `<span class="meta">ยังไม่มีรูปแนบ</span>`;
+  }
+  function handleEmpIdCardPhoto(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    resizeImageFile(file, 800, function(dataUrl){
+      pendingEmpIdCardPhoto = dataUrl;
+      renderEmpIdCardPhotoPreview();
+    });
+    event.target.value = "";
   }
   function closeEmpModal(){
     document.getElementById("emp-modal").classList.remove("active");
@@ -687,12 +713,13 @@
     const bankName = role === "owner" ? null : (document.getElementById("emp-bank-name").value.trim() || null);
     const bankAccountNumber = role === "owner" ? null : (document.getElementById("emp-bank-account").value.trim() || null);
     const bankAccountName = role === "owner" ? null : (document.getElementById("emp-bank-account-name").value.trim() || null);
+    const idCardPhoto = role === "owner" ? null : pendingEmpIdCardPhoto;
 
     const { error } = await sb.rpc("rpc_upsert_employee", {
       p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_emp_code: code,
       p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary,
       p_id_card_number: idCardNumber, p_bank_name: bankName, p_bank_account_number: bankAccountNumber,
-      p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency
+      p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency, p_id_card_photo: idCardPhoto
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
 
@@ -1334,7 +1361,21 @@
         <div><div class="stat-label">เงินหัก</div><div class="stat-value" style="color:var(--danger);">-฿${deduction.toLocaleString()}</div></div>
         <div><div class="stat-label">เงินเดือนสุทธิ</div><div class="stat-value">฿${net.toLocaleString()}</div></div>
       </div>
-      <div class="meta" style="margin-top:14px;">เงินเดือนฐาน ฿${emp.baseSalary.toLocaleString()} + ค่าคอม ฿${commission.toLocaleString()} − เงินหัก ฿${deduction.toLocaleString()} = สุทธิ ฿${net.toLocaleString()}</div>`;
+      <div class="meta" style="margin-top:14px;">เงินเดือนฐาน ฿${emp.baseSalary.toLocaleString()} + ค่าคอม ฿${commission.toLocaleString()} − เงินหัก ฿${deduction.toLocaleString()} = สุทธิ ฿${net.toLocaleString()}</div>
+      <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:14px;">
+        <div class="stat-label" style="margin-bottom:8px;">ข้อมูลสำหรับทำจ่าย</div>
+        <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+          ${emp.idCardPhoto
+            ? `<img src="${emp.idCardPhoto}" style="width:180px;height:112px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+            : `<div class="meta" style="color:var(--danger);">⚠️ ยังไม่มีรูปบัตรประชาชน — เพิ่มได้ที่หน้า "จัดการพนักงาน"</div>`}
+          <div class="meta">
+            เลขบัตรประชาชน: ${emp.idCardNumber || "-"}<br>
+            ธนาคาร: ${emp.bankName || "-"}<br>
+            เลขบัญชี: ${emp.bankAccountNumber || "-"}<br>
+            ชื่อบัญชี: ${emp.bankAccountName || "-"}
+          </div>
+        </div>
+      </div>`;
   }
 
   // init: restore session (if any) via a fresh PIN check, otherwise show login
