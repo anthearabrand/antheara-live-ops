@@ -1553,7 +1553,7 @@
       const pills = daySessions.map(s => {
         const emp = getEmployeeById(s.employeeId);
         const empName = emp ? emp.name : "-";
-        return `<div class="session-pill ${s.platform}" title="${empName} · ${s.startTime}-${s.endTime} · ${s.status}">${statusDot[s.status]} ${s.startTime} ${platformLabel(s.platform)}</div>`;
+        return `<div class="session-pill ${s.platform}" title="${empName} · ${s.startTime}-${s.endTime} · ${s.status}">${statusDot[s.status]} ${s.startTime} ${empName}</div>`;
       }).join("");
       cells += `<div class="calendar-day ${isToday ? "today" : ""}">
         <div class="day-num">${day}</div>
