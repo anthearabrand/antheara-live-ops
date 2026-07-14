@@ -1008,7 +1008,10 @@
           <span class="stat-value" style="font-size:16px;">฿${p.price.toLocaleString()}</span>
         </div>
         <p class="meta" style="white-space:pre-wrap;">${p.description || "ยังไม่มีรายละเอียด"}</p>
-        ${isOwner ? `<button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไขรายละเอียด</button>` : ""}
+        ${isOwner ? `<div style="display:flex;gap:8px;">
+          <button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไขรายละเอียด</button>
+          <button class="btn ghost sm" onclick="deleteProduct(${p.id})">ลบ</button>
+        </div>` : ""}
       </div>`).join("") || `<div class="card"><p class="meta">ยังไม่มีสินค้าในระบบ</p></div>`;
     return `
       <div class="card" style="border:none;box-shadow:none;background:transparent;padding-bottom:0;">
@@ -1907,7 +1910,10 @@
           <td>${p.name}</td>
           <td>฿${p.price.toLocaleString()}</td>
           <td>${low ? `<span class="chip warn">เหลือน้อย ${p.stockQty}</span>` : p.stockQty}</td>
-          ${isOwner ? `<td><button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไข</button></td>` : ""}
+          ${isOwner ? `<td style="display:flex;gap:8px;">
+            <button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไข</button>
+            <button class="btn ghost sm" onclick="deleteProduct(${p.id})">ลบ</button>
+          </td>` : ""}
         </tr>`;
     }).join("") || `<tr><td colspan="4">ยังไม่มีสินค้าในสต๊อก</td></tr>`;
     return `
@@ -1963,7 +1969,22 @@
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     closeProductModal();
-    renderPage("stock");
+    renderPage(currentPage);
+  }
+
+  let pendingDeleteProductId = null;
+  async function deleteProduct(id){
+    if(pendingDeleteProductId !== id){
+      pendingDeleteProductId = id;
+      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      return;
+    }
+    pendingDeleteProductId = null;
+    const { error } = await sb.rpc("rpc_delete_product", { p_code: myCode, p_id: id });
+    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("ลบสินค้าเรียบร้อย", "success");
+    renderPage(currentPage);
   }
 
   // ===== payroll (เฉพาะพนักงานประจำ) =====
