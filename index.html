@@ -385,6 +385,21 @@
     </div>
   </div>
 
+  <!-- ORDER EDIT MODAL -->
+  <div class="modal-overlay" id="order-modal">
+    <div class="modal">
+      <h3>แก้ไขออเดอร์</h3>
+      <input type="hidden" id="order-edit-id">
+      <div class="field" id="order-edit-qty-field"><label>จำนวน</label><input id="order-edit-qty" type="number" min="1"></div>
+      <div class="field" id="order-edit-amount-field"><label>ยอดขาย (บาท)</label><input id="order-edit-amount" type="number" min="1"></div>
+      <div class="field"><label id="order-edit-name-label">ชื่อลูกค้า</label><input id="order-edit-customer"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeOrderModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveOrderEdit()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- QUIZ QUESTION MODAL -->
   <div class="modal-overlay" id="quiz-question-modal">
     <div class="modal">
@@ -1613,7 +1628,7 @@
       actionHtml = `<button class="btn sm ghost" onclick="goToPage('sales-entry')">🛒 บันทึกยอดขาย</button>
         <button class="btn sm" onclick="triggerEndLive(${s.id})">🧾 จบไลฟ์</button>`;
     }
-    if(s.status === "นัดหมาย" && (isOwner || isOwnSession)){
+    if(isOwner || (isOwnSession && s.status === "นัดหมาย")){
       actionHtml += `<button class="btn sm ghost" onclick="openSessionModal(${s.id})">แก้ไข</button>
         <button class="btn sm ghost" onclick="deleteSession(${s.id})">ลบ</button>`;
     }
@@ -1793,7 +1808,11 @@
     const orderRows = myOrders.slice().reverse().map(o => `
       <div class="order-row">
         <span>${o.productId ? `${o.productName} ×${o.qty}` : o.productName}${o.customerName ? " · " + o.customerName : ""}</span>
-        <b>฿${o.total.toLocaleString()}</b>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <b>฿${o.total.toLocaleString()}</b>
+          <button class="btn ghost sm" onclick="openOrderEditModal(${o.id})">แก้ไข</button>
+          <button class="btn ghost sm" onclick="deleteOrder(${o.id})">ลบ</button>
+        </span>
       </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ในรอบนี้</div>`;
 
     const formHtml = salesEntryMode === "itemized" ? itemizedFormHtml() : quickFormHtml();
@@ -1864,6 +1883,55 @@
     if(error){ showToast("บันทึกยอดรวมไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     renderPage("sales-entry");
+  }
+
+  function openOrderEditModal(id){
+    const o = data.orders.find(x => x.id === id);
+    const isItemized = o.qty !== null && o.qty !== undefined;
+    document.getElementById("order-edit-id").value = o.id;
+    document.getElementById("order-edit-qty-field").style.display = isItemized ? "block" : "none";
+    document.getElementById("order-edit-amount-field").style.display = isItemized ? "none" : "block";
+    document.getElementById("order-edit-qty").value = isItemized ? o.qty : "";
+    document.getElementById("order-edit-amount").value = isItemized ? "" : o.total;
+    document.getElementById("order-edit-name-label").textContent = isItemized ? "ชื่อลูกค้า" : "โน้ต";
+    document.getElementById("order-edit-customer").value = o.customerName || "";
+    document.getElementById("order-modal").classList.add("active");
+  }
+  function closeOrderModal(){
+    document.getElementById("order-modal").classList.remove("active");
+  }
+  async function saveOrderEdit(){
+    const id = Number(document.getElementById("order-edit-id").value);
+    const o = data.orders.find(x => x.id === id);
+    const isItemized = o.qty !== null && o.qty !== undefined;
+    const qty = isItemized ? Number(document.getElementById("order-edit-qty").value) : null;
+    const amount = isItemized ? null : Number(document.getElementById("order-edit-amount").value);
+    const customerName = document.getElementById("order-edit-customer").value.trim();
+    if(isItemized && (!qty || qty < 1)){ showToast("กรอกจำนวนให้ถูกต้อง", "error"); return; }
+    if(!isItemized && (!amount || amount < 1)){ showToast("กรอกยอดขายให้ถูกต้อง", "error"); return; }
+    const { error } = await sb.rpc("rpc_update_order", {
+      p_code: myCode, p_id: id, p_qty: qty, p_amount: amount, p_customer_name: customerName
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    closeOrderModal();
+    showToast("บันทึกออเดอร์เรียบร้อย", "success");
+    renderPage(currentPage);
+  }
+
+  let pendingDeleteOrderId = null;
+  async function deleteOrder(id){
+    if(pendingDeleteOrderId !== id){
+      pendingDeleteOrderId = id;
+      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      return;
+    }
+    pendingDeleteOrderId = null;
+    const { error } = await sb.rpc("rpc_delete_order", { p_code: myCode, p_id: id });
+    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("ลบออเดอร์เรียบร้อย (คืนสต๊อกให้แล้วถ้าเป็นออเดอร์แบบระบุสินค้า)", "success");
+    renderPage(currentPage);
   }
 
   // ===== live summary =====
@@ -1951,7 +2019,20 @@
           ${s.checkInPhoto ? `<div class="ph"><img src="${s.checkInPhoto}" style="width:120px;height:120px;">เช็คอินตอนเริ่มไลฟ์</div>` : `<div class="meta">ไม่มีรูปเช็คอิน</div>`}
           ${s.salesProofPhoto ? `<div class="ph"><img src="${s.salesProofPhoto}" style="width:120px;height:120px;">แคปยอดตอนปิดไลฟ์</div>` : `<div class="meta">ไม่มีรูปแคปยอด</div>`}
         </div>
-      </div>`;
+      </div>
+      ${currentEmployee.role === "owner" ? `
+      <div class="card">
+        <h3 style="margin-top:0;">ออเดอร์ทั้งหมดในรอบนี้ (แก้ไข/ลบได้เผื่อมีข้อมูลผิด)</h3>
+        ${orders.slice().reverse().map(o => `
+          <div class="order-row">
+            <span>${o.productId ? `${o.productName} ×${o.qty}` : o.productName}${o.customerName ? " · " + o.customerName : ""}</span>
+            <span style="display:flex;align-items:center;gap:10px;">
+              <b>฿${o.total.toLocaleString()}</b>
+              <button class="btn ghost sm" onclick="openOrderEditModal(${o.id})">แก้ไข</button>
+              <button class="btn ghost sm" onclick="deleteOrder(${o.id})">ลบ</button>
+            </span>
+          </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ในรอบนี้</div>`}
+      </div>` : ""}`;
   }
 
   // ===== stock =====
