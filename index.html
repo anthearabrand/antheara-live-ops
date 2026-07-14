@@ -316,6 +316,10 @@
           <input type="file" id="emp-idcard-photo-input" accept="image/*" style="display:none" onchange="handleEmpIdCardPhoto(event)">
           <button type="button" class="btn ghost sm" onclick="document.getElementById('emp-idcard-photo-input').click()">📷 แนบ/เปลี่ยนรูปบัตรประชาชน</button>
         </div>
+        <div class="field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+          <label>โน้ตของเจ้าของ (ส่วนตัว ไม่แสดงให้พนักงานเห็น)</label>
+          <textarea id="emp-notes" rows="3" placeholder="เช่น ลาป่วยบ่อยเดือนนี้, นัดคุยเรื่องปรับเงินเดือน, ตักเตือนเรื่องมาสาย"></textarea>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" onclick="closeEmpModal()">ยกเลิก</button>
@@ -463,7 +467,7 @@
       employmentType:r.employment_type, baseSalary:r.base_salary,
       idCardNumber:r.id_card_number, idCardPhoto:r.id_card_photo, bankName:r.bank_name,
       bankAccountNumber:r.bank_account_number, bankAccountName:r.bank_account_name,
-      paymentFrequency:r.payment_frequency, address:r.address
+      paymentFrequency:r.payment_frequency, address:r.address, notes:r.notes
     };
   }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
@@ -796,6 +800,7 @@
         <td>${e.role === "owner" ? '<span class="chip owner">เจ้าของ</span>' : `<span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>`}</td>
         <td>${e.employmentType ? `<span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>` : "-"}</td>
         <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : (e.paymentFrequency ? `<span class="chip neutral">${e.paymentFrequency === "daily" ? "รายวัน" : "รายสัปดาห์"}</span>` : "-")}</td>
+        <td style="max-width:220px;">${e.notes ? `<span class="meta" title="${e.notes.replace(/"/g, "&quot;")}">📝 ${e.notes.length > 30 ? e.notes.slice(0,30) + "…" : e.notes}</span>` : `<span class="meta">-</span>`}</td>
         <td style="display:flex;gap:8px;">
           <button class="btn ghost sm" onclick="openEmpModal(${e.id})">แก้ไข</button>
           ${e.role !== "owner" ? `<button class="btn ghost sm" onclick="deleteEmployee(${e.id})">ลบ</button>` : ""}
@@ -809,7 +814,7 @@
         </div>
         <p class="meta" style="margin-top:-8px;">เลขบัตรประชาชน/บัญชีธนาคารดูและแก้ไขได้ในหน้าต่างแก้ไขพนักงาน หรือดูรวมทุกคนได้ที่เมนู "ข้อมูลพนักงาน (HR)" (ไม่โชว์ในตารางนี้เพื่อความเป็นส่วนตัว)</p>
         <table>
-          <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือน/ค่าจ้าง</th><th></th></tr></thead>
+          <thead><tr><th>ชื่อ</th><th>รหัส PIN</th><th>แพลตฟอร์ม</th><th>ประเภทงาน</th><th>เงินเดือน/ค่าจ้าง</th><th>โน้ต</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
@@ -881,6 +886,7 @@
       document.getElementById("emp-bank-name").value = e.bankName || "";
       document.getElementById("emp-bank-account").value = e.bankAccountNumber || "";
       document.getElementById("emp-bank-account-name").value = e.bankAccountName || "";
+      document.getElementById("emp-notes").value = e.notes || "";
       pendingEmpIdCardPhoto = e.idCardPhoto || null;
     } else {
       document.getElementById("emp-modal-title").textContent = "เพิ่มพนักงาน";
@@ -896,6 +902,7 @@
       document.getElementById("emp-bank-name").value = "";
       document.getElementById("emp-bank-account").value = "";
       document.getElementById("emp-bank-account-name").value = "";
+      document.getElementById("emp-notes").value = "";
       pendingEmpIdCardPhoto = null;
     }
     renderEmpIdCardPhotoPreview();
@@ -942,12 +949,14 @@
     const bankAccountNumber = role === "owner" ? null : (document.getElementById("emp-bank-account").value.trim() || null);
     const bankAccountName = role === "owner" ? null : (document.getElementById("emp-bank-account-name").value.trim() || null);
     const idCardPhoto = role === "owner" ? null : pendingEmpIdCardPhoto;
+    const notes = role === "owner" ? null : (document.getElementById("emp-notes").value.trim() || null);
 
     const { error } = await sb.rpc("rpc_upsert_employee", {
       p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_emp_code: code,
       p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary,
       p_id_card_number: idCardNumber, p_bank_name: bankName, p_bank_account_number: bankAccountNumber,
-      p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency, p_id_card_photo: idCardPhoto
+      p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency, p_id_card_photo: idCardPhoto,
+      p_notes: notes
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
 
