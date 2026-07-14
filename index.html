@@ -472,8 +472,8 @@
   }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
   function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty, description:r.description}; }
-  function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time}; }
-  function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at}; }
+  function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time, deleteRequested:r.delete_requested}; }
+  function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at, deleteRequested:r.delete_requested}; }
   function mapDocument(r){ return {id:r.id, category:r.category, title:r.title, content:r.content, photo:r.photo, createdAt:r.created_at}; }
   function mapQuizLevel(r){ return {id:r.id, name:r.name, sortOrder:r.sort_order, passingScorePercent:r.passing_score_percent}; }
   function mapCertification(r){ return {employeeId:r.employee_id, levelId:r.level_id, scorePercent:r.score_percent, passed:r.passed, attemptedAt:r.attempted_at}; }
@@ -1637,9 +1637,16 @@
       actionHtml = `<button class="btn sm ghost" onclick="goToPage('sales-entry')">🛒 บันทึกยอดขาย</button>
         <button class="btn sm" onclick="triggerEndLive(${s.id})">🧾 จบไลฟ์</button>`;
     }
-    if(isOwner || (isOwnSession && s.status === "นัดหมาย")){
+    if(s.deleteRequested && (isOwner || isOwnSession)){
+      actionHtml += isOwner
+        ? `<span class="chip part">⏳ ขอลบ</span>
+           <button class="btn sm ghost" onclick="approveDeleteSession(${s.id})">อนุมัติลบ</button>
+           <button class="btn sm ghost" onclick="cancelDeleteRequestSession(${s.id})">ปฏิเสธ</button>`
+        : `<span class="chip part">⏳ รอเจ้าของอนุมัติลบ</span>
+           <button class="btn sm ghost" onclick="cancelDeleteRequestSession(${s.id})">ยกเลิกคำขอ</button>`;
+    } else if(isOwner || (isOwnSession && s.status === "นัดหมาย")){
       actionHtml += `<button class="btn sm ghost" onclick="openSessionModal(${s.id})">แก้ไข</button>
-        <button class="btn sm ghost" onclick="deleteSession(${s.id})">ลบ</button>`;
+        <button class="btn sm ghost" onclick="deleteSession(${s.id})">${isOwner ? "ลบ" : "ขอลบ"}</button>`;
     }
     let photosHtml = "";
     if(s.checkInPhoto || s.salesProofPhoto){
@@ -1722,17 +1729,32 @@
 
   let pendingDeleteSessionId = null;
   async function deleteSession(id){
+    const isOwner = currentEmployee.role === "owner";
     if(pendingDeleteSessionId !== id){
       pendingDeleteSessionId = id;
-      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      showToast(isOwner ? "กดลบอีกครั้งเพื่อยืนยันการลบ" : "กดอีกครั้งเพื่อยืนยันการขอลบ (ต้องรอเจ้าของอนุมัติ)", "warn");
       return;
     }
     pendingDeleteSessionId = null;
     const { error } = await sb.rpc("rpc_delete_session", { p_code: myCode, p_id: id });
-    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
-    showToast("ลบนัดหมายไลฟ์เรียบร้อย", "success");
-    renderPage("live-schedule");
+    showToast(isOwner ? "ลบนัดหมายไลฟ์เรียบร้อย" : "ส่งคำขอลบแล้ว รอเจ้าของอนุมัติ", "success");
+    renderPage(currentPage);
+  }
+  async function cancelDeleteRequestSession(id){
+    const { error } = await sb.rpc("rpc_cancel_delete_request_session", { p_code: myCode, p_id: id });
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("ยกเลิกคำขอลบแล้ว", "success");
+    renderPage(currentPage);
+  }
+  async function approveDeleteSession(id){
+    const { error } = await sb.rpc("rpc_approve_delete_session", { p_code: myCode, p_id: id });
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("อนุมัติลบเรียบร้อย", "success");
+    renderPage(currentPage);
   }
 
   let pendingCheckInSessionId = null;
@@ -1804,6 +1826,20 @@
     renderPage("sales-entry");
   }
 
+  function orderActionButtonsHtml(o, isOwner){
+    if(o.deleteRequested){
+      if(isOwner){
+        return `<span class="chip part">⏳ ขอลบ</span>
+          <button class="btn ghost sm" onclick="approveDeleteOrder(${o.id})">อนุมัติลบ</button>
+          <button class="btn ghost sm" onclick="cancelDeleteRequestOrder(${o.id})">ปฏิเสธ</button>`;
+      }
+      return `<span class="chip part">⏳ รอเจ้าของอนุมัติลบ</span>
+        <button class="btn ghost sm" onclick="cancelDeleteRequestOrder(${o.id})">ยกเลิกคำขอ</button>`;
+    }
+    return `<button class="btn ghost sm" onclick="openOrderEditModal(${o.id})">แก้ไข</button>
+      <button class="btn ghost sm" onclick="deleteOrder(${o.id})">${isOwner ? "ลบ" : "ขอลบ"}</button>`;
+  }
+
   function renderSalesEntry(){
     const active = findActiveSession(currentEmployee.id);
     if(!active){
@@ -1819,8 +1855,7 @@
         <span>${o.productId ? `${o.productName} ×${o.qty}` : o.productName}${o.customerName ? " · " + o.customerName : ""}</span>
         <span style="display:flex;align-items:center;gap:10px;">
           <b>฿${o.total.toLocaleString()}</b>
-          <button class="btn ghost sm" onclick="openOrderEditModal(${o.id})">แก้ไข</button>
-          <button class="btn ghost sm" onclick="deleteOrder(${o.id})">ลบ</button>
+          ${orderActionButtonsHtml(o, currentEmployee.role === "owner")}
         </span>
       </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ในรอบนี้</div>`;
 
@@ -1930,16 +1965,31 @@
 
   let pendingDeleteOrderId = null;
   async function deleteOrder(id){
+    const isOwner = currentEmployee.role === "owner";
     if(pendingDeleteOrderId !== id){
       pendingDeleteOrderId = id;
-      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      showToast(isOwner ? "กดลบอีกครั้งเพื่อยืนยันการลบ" : "กดอีกครั้งเพื่อยืนยันการขอลบ (ต้องรอเจ้าของอนุมัติ)", "warn");
       return;
     }
     pendingDeleteOrderId = null;
     const { error } = await sb.rpc("rpc_delete_order", { p_code: myCode, p_id: id });
-    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
-    showToast("ลบออเดอร์เรียบร้อย (คืนสต๊อกให้แล้วถ้าเป็นออเดอร์แบบระบุสินค้า)", "success");
+    showToast(isOwner ? "ลบออเดอร์เรียบร้อย (คืนสต๊อกให้แล้วถ้าเป็นออเดอร์แบบระบุสินค้า)" : "ส่งคำขอลบแล้ว รอเจ้าของอนุมัติ", "success");
+    renderPage(currentPage);
+  }
+  async function cancelDeleteRequestOrder(id){
+    const { error } = await sb.rpc("rpc_cancel_delete_request_order", { p_code: myCode, p_id: id });
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("ยกเลิกคำขอลบแล้ว", "success");
+    renderPage(currentPage);
+  }
+  async function approveDeleteOrder(id){
+    const { error } = await sb.rpc("rpc_approve_delete_order", { p_code: myCode, p_id: id });
+    if(error){ showToast("ไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("อนุมัติลบเรียบร้อย (คืนสต๊อกให้แล้วถ้าเป็นออเดอร์แบบระบุสินค้า)", "success");
     renderPage(currentPage);
   }
 
@@ -2037,8 +2087,7 @@
             <span>${o.productId ? `${o.productName} ×${o.qty}` : o.productName}${o.customerName ? " · " + o.customerName : ""}</span>
             <span style="display:flex;align-items:center;gap:10px;">
               <b>฿${o.total.toLocaleString()}</b>
-              <button class="btn ghost sm" onclick="openOrderEditModal(${o.id})">แก้ไข</button>
-              <button class="btn ghost sm" onclick="deleteOrder(${o.id})">ลบ</button>
+              ${orderActionButtonsHtml(o, true)}
             </span>
           </div>`).join("") || `<div class="meta" style="padding:8px 0;">ยังไม่มีออเดอร์ในรอบนี้</div>`}
       </div>` : ""}`;
