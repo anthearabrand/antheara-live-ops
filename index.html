@@ -1012,7 +1012,10 @@
       </div>`).join("") || `<div class="card"><p class="meta">ยังไม่มีสินค้าในระบบ</p></div>`;
     return `
       <div class="card" style="border:none;box-shadow:none;background:transparent;padding-bottom:0;">
-        <p class="meta">ข้อมูลสำหรับ MC ศึกษาก่อนไลฟ์ — ส่วนผสม/จุดขาย/วิธีใช้ของแต่ละสินค้า</p>
+        <div class="toolbar">
+          <p class="meta" style="margin:0;">ข้อมูลสำหรับ MC ศึกษาก่อนไลฟ์ — ส่วนผสม/จุดขาย/วิธีใช้ของแต่ละสินค้า</p>
+          ${isOwner ? `<button class="btn" onclick="openProductModal()">+ เพิ่มสินค้า</button>` : ""}
+        </div>
       </div>
       ${cards}`;
   }
