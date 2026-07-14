@@ -330,9 +330,62 @@
       <div class="field"><label>ชื่อสินค้า</label><input id="product-name"></div>
       <div class="field"><label>ราคา (บาท)</label><input id="product-price" type="number" min="0"></div>
       <div class="field"><label>จำนวนคงเหลือ</label><input id="product-stock" type="number" min="0"></div>
+      <div class="field"><label>รายละเอียดสินค้า (ส่วนผสม/จุดขาย/วิธีใช้ — สำหรับ MC ศึกษา)</label><textarea id="product-description" rows="4" placeholder="เช่น ส่วนผสมหลัก, กลิ่น, เหมาะกับผิวแบบไหน, จุดขายเวลาพรีเซนต์"></textarea></div>
       <div class="modal-actions">
         <button class="btn ghost" onclick="closeProductModal()">ยกเลิก</button>
         <button class="btn" onclick="saveProduct()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCUMENT MODAL -->
+  <div class="modal-overlay" id="document-modal">
+    <div class="modal">
+      <h3 id="document-modal-title">เพิ่มเอกสาร</h3>
+      <input type="hidden" id="document-id">
+      <div class="field"><label>หมวด</label>
+        <select id="document-category">
+          <option value="general">เอกสารทั่วไป</option>
+          <option value="live_rules">กฎการไลฟ์</option>
+        </select>
+      </div>
+      <div class="field"><label>หัวข้อ</label><input id="document-title"></div>
+      <div class="field"><label>เนื้อหา</label><textarea id="document-content" rows="6"></textarea></div>
+      <div class="field">
+        <label>รูปแนบ (ถ้ามี)</label>
+        <div id="document-photo-preview" style="margin-bottom:8px;"></div>
+        <input type="file" id="document-photo-input" accept="image/*" style="display:none" onchange="handleDocumentPhoto(event)">
+        <button type="button" class="btn ghost sm" onclick="document.getElementById('document-photo-input').click()">📷 แนบ/เปลี่ยนรูป</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeDocumentModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveDocument()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIZ QUESTION MODAL -->
+  <div class="modal-overlay" id="quiz-question-modal">
+    <div class="modal">
+      <h3 id="quiz-question-modal-title">เพิ่มคำถาม</h3>
+      <input type="hidden" id="quiz-question-id">
+      <input type="hidden" id="quiz-question-level-id">
+      <div class="field"><label>คำถาม</label><textarea id="quiz-question-text" rows="2"></textarea></div>
+      <div class="field"><label>ตัวเลือก ก</label><input id="quiz-choice-a"></div>
+      <div class="field"><label>ตัวเลือก ข</label><input id="quiz-choice-b"></div>
+      <div class="field"><label>ตัวเลือก ค</label><input id="quiz-choice-c"></div>
+      <div class="field"><label>ตัวเลือก ง</label><input id="quiz-choice-d"></div>
+      <div class="field"><label>คำตอบที่ถูกต้อง</label>
+        <select id="quiz-correct-choice">
+          <option value="a">ก</option>
+          <option value="b">ข</option>
+          <option value="c">ค</option>
+          <option value="d">ง</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeQuizQuestionModal()">ยกเลิก</button>
+        <button class="btn" onclick="saveQuizQuestion()">บันทึก</button>
       </div>
     </div>
   </div>
@@ -362,7 +415,7 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const SESSION_KEY = "liveTeamOpsSessionCode";
 
-  let data = { employees: [], commissionTiers: [], liveSessions: [], products: [], orders: [] };
+  let data = { employees: [], commissionTiers: [], liveSessions: [], products: [], orders: [], documents: [], quizLevels: [], certifications: [] };
   let currentEmployee = null;
   let myCode = null;
   let dashboardRangeStart = null;
@@ -378,9 +431,12 @@
     };
   }
   function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
-  function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty}; }
+  function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty, description:r.description}; }
   function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time}; }
   function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at}; }
+  function mapDocument(r){ return {id:r.id, category:r.category, title:r.title, content:r.content, photo:r.photo, createdAt:r.created_at}; }
+  function mapQuizLevel(r){ return {id:r.id, name:r.name, sortOrder:r.sort_order, passingScorePercent:r.passing_score_percent}; }
+  function mapCertification(r){ return {employeeId:r.employee_id, levelId:r.level_id, scorePercent:r.score_percent, passed:r.passed, attemptedAt:r.attempted_at}; }
 
   // Calls rpc_bootstrap with the given PIN; returns the matched employee row, or null if
   // the PIN doesn't match anyone. Populates `data` from the payload either way it succeeds.
@@ -393,6 +449,9 @@
     data.liveSessions = (payload.live_sessions || []).map(mapSession);
     data.products = (payload.products || []).map(mapProduct);
     data.orders = (payload.orders || []).map(mapOrder);
+    data.documents = (payload.documents || []).map(mapDocument);
+    data.quizLevels = (payload.quiz_levels || []).map(mapQuizLevel);
+    data.certifications = (payload.certifications || []).map(mapCertification);
     return mapEmployee(payload.me);
   }
 
@@ -408,6 +467,9 @@
     {id:"sales-entry", icon:"🛒", label:"บันทึกยอดขาย", roles:["owner","staff"]},
     {id:"live-summary", icon:"📋", label:"สรุปผลไลฟ์", roles:["owner","staff"]},
     {id:"stock", icon:"📦", label:"สต๊อกสินค้า", roles:["owner","staff"]},
+    {id:"product-info", icon:"🧴", label:"ข้อมูลสินค้า", roles:["owner","staff"]},
+    {id:"documents", icon:"📄", label:"เอกสาร", roles:["owner","staff"]},
+    {id:"mc-certification", icon:"🎓", label:"บททดสอบ MC", roles:["owner","staff"]},
     {id:"my-profile", icon:"🪪", label:"ข้อมูลส่วนตัว", roles:["staff"]},
     {id:"payroll", icon:"💰", label:"เงินเดือน & ค่าคอม", roles:["owner"]},
     {id:"employees", icon:"👥", label:"จัดการพนักงาน", roles:["owner"]},
@@ -509,6 +571,9 @@
     if(pageId === "payroll"){ el.innerHTML = renderPayroll(); return; }
     if(pageId === "my-profile"){ el.innerHTML = renderMyProfile(); return; }
     if(pageId === "hr-profiles"){ el.innerHTML = renderHrProfiles(); return; }
+    if(pageId === "product-info"){ el.innerHTML = renderProductInfo(); return; }
+    if(pageId === "documents"){ el.innerHTML = renderDocuments(); return; }
+    if(pageId === "mc-certification"){ el.innerHTML = renderMcCertification(); return; }
     el.innerHTML = renderPlaceholder(pageId);
   }
 
@@ -914,6 +979,432 @@
     await refreshAllData();
     showToast("บันทึกข้อมูลส่วนตัวเรียบร้อย", "success");
     renderPage("my-profile");
+  }
+
+  // ===== product info (read-focused, for MC study) =====
+  function renderProductInfo(){
+    const isOwner = currentEmployee.role === "owner";
+    const cards = data.products.map(p => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <h3 style="margin:0 0 8px;">${p.name}</h3>
+          <span class="stat-value" style="font-size:16px;">฿${p.price.toLocaleString()}</span>
+        </div>
+        <p class="meta" style="white-space:pre-wrap;">${p.description || "ยังไม่มีรายละเอียด"}</p>
+        ${isOwner ? `<button class="btn ghost sm" onclick="openProductModal(${p.id})">แก้ไขรายละเอียด</button>` : ""}
+      </div>`).join("") || `<div class="card"><p class="meta">ยังไม่มีสินค้าในระบบ</p></div>`;
+    return `
+      <div class="card" style="border:none;box-shadow:none;background:transparent;padding-bottom:0;">
+        <p class="meta">ข้อมูลสำหรับ MC ศึกษาก่อนไลฟ์ — ส่วนผสม/จุดขาย/วิธีใช้ของแต่ละสินค้า</p>
+      </div>
+      ${cards}`;
+  }
+
+  // ===== documents (เอกสาร + กฎการไลฟ์ รวมเมนูเดียว แยกหมวดด้วยแท็บ) =====
+  let documentFilterCategory = "all";
+  let pendingDocumentPhoto = null;
+  let pendingDeleteDocumentId = null;
+
+  function setDocumentFilter(cat){
+    documentFilterCategory = cat;
+    renderPage("documents");
+  }
+
+  function renderDocuments(){
+    const isOwner = currentEmployee.role === "owner";
+    const filtered = documentFilterCategory === "all"
+      ? data.documents
+      : data.documents.filter(d => d.category === documentFilterCategory);
+    const cards = filtered.map(d => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0 0 6px;">${d.title}</h3>
+            <span class="chip ${d.category === "live_rules" ? "owner" : "neutral"}">${d.category === "live_rules" ? "กฎการไลฟ์" : "เอกสารทั่วไป"}</span>
+          </div>
+          ${isOwner ? `
+            <div style="display:flex;gap:8px;">
+              <button class="btn ghost sm" onclick="openDocumentModal(${d.id})">แก้ไข</button>
+              <button class="btn ghost sm" onclick="deleteDocument(${d.id})">ลบ</button>
+            </div>` : ""}
+        </div>
+        ${d.content ? `<p class="meta" style="white-space:pre-wrap;margin-top:10px;">${d.content}</p>` : ""}
+        ${d.photo ? `<img src="${d.photo}" style="max-width:100%;border-radius:8px;border:1px solid var(--border);margin-top:10px;">` : ""}
+      </div>`).join("") || `<div class="card"><p class="meta">ยังไม่มีเอกสารในหมวดนี้</p></div>`;
+
+    return `
+      <div class="card" style="border:none;box-shadow:none;background:transparent;padding-bottom:0;">
+        <div class="toolbar">
+          <div class="tab-bar">
+            <button class="tab-btn ${documentFilterCategory === "all" ? "active" : ""}" onclick="setDocumentFilter('all')">ทั้งหมด</button>
+            <button class="tab-btn ${documentFilterCategory === "general" ? "active" : ""}" onclick="setDocumentFilter('general')">เอกสารทั่วไป</button>
+            <button class="tab-btn ${documentFilterCategory === "live_rules" ? "active" : ""}" onclick="setDocumentFilter('live_rules')">กฎการไลฟ์</button>
+          </div>
+          ${isOwner ? `<button class="btn" onclick="openDocumentModal()">+ เพิ่มเอกสาร</button>` : ""}
+        </div>
+      </div>
+      ${cards}`;
+  }
+
+  function openDocumentModal(id){
+    if(currentEmployee.role !== "owner") return;
+    const modal = document.getElementById("document-modal");
+    if(id){
+      const d = data.documents.find(x => x.id === id);
+      document.getElementById("document-modal-title").textContent = "แก้ไขเอกสาร";
+      document.getElementById("document-id").value = d.id;
+      document.getElementById("document-category").value = d.category;
+      document.getElementById("document-title").value = d.title;
+      document.getElementById("document-content").value = d.content || "";
+      pendingDocumentPhoto = d.photo || null;
+    } else {
+      document.getElementById("document-modal-title").textContent = "เพิ่มเอกสาร";
+      document.getElementById("document-id").value = "";
+      document.getElementById("document-category").value = documentFilterCategory !== "all" ? documentFilterCategory : "general";
+      document.getElementById("document-title").value = "";
+      document.getElementById("document-content").value = "";
+      pendingDocumentPhoto = null;
+    }
+    renderDocumentPhotoPreview();
+    modal.classList.add("active");
+  }
+  function closeDocumentModal(){
+    document.getElementById("document-modal").classList.remove("active");
+  }
+  function renderDocumentPhotoPreview(){
+    const el = document.getElementById("document-photo-preview");
+    el.innerHTML = pendingDocumentPhoto
+      ? `<img src="${pendingDocumentPhoto}" style="width:160px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+      : `<span class="meta">ยังไม่มีรูปแนบ</span>`;
+  }
+  function handleDocumentPhoto(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    resizeImageFile(file, 900, function(dataUrl){
+      pendingDocumentPhoto = dataUrl;
+      renderDocumentPhotoPreview();
+    });
+    event.target.value = "";
+  }
+  async function saveDocument(){
+    const id = document.getElementById("document-id").value;
+    const category = document.getElementById("document-category").value;
+    const title = document.getElementById("document-title").value.trim();
+    const content = document.getElementById("document-content").value.trim() || null;
+    if(!title){ showToast("กรอกหัวข้อก่อน", "error"); return; }
+
+    const { error } = await sb.rpc("rpc_upsert_document", {
+      p_code: myCode, p_id: id ? Number(id) : null, p_category: category,
+      p_title: title, p_content: content, p_photo: pendingDocumentPhoto
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+
+    await refreshAllData();
+    closeDocumentModal();
+    renderPage("documents");
+  }
+  async function deleteDocument(id){
+    if(pendingDeleteDocumentId !== id){
+      pendingDeleteDocumentId = id;
+      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      return;
+    }
+    pendingDeleteDocumentId = null;
+    const { error } = await sb.rpc("rpc_delete_document", { p_code: myCode, p_id: id });
+    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    renderPage("documents");
+  }
+
+  // ===== MC certification / quiz =====
+  let mcAdminLevelId = null;
+  let mcAdminQuestions = [];
+  let pendingDeleteQuestionId = null;
+  let mcTakingLevelId = null;
+  let mcQuizQuestions = [];
+  let mcQuizAnswers = {};
+  let mcQuizResult = null;
+
+  function getCertification(employeeId, levelId){
+    return data.certifications.find(c => c.employeeId === employeeId && c.levelId === levelId);
+  }
+  function choiceText(q, c){ return {a:q.choiceA, b:q.choiceB, c:q.choiceC, d:q.choiceD}[c]; }
+
+  function renderMcCertification(){
+    return currentEmployee.role === "owner" ? renderMcCertificationOwner() : renderMcCertificationStaff();
+  }
+
+  function renderCertificationOverviewTable(){
+    const staff = data.employees.filter(e => e.role === "staff");
+    const levels = data.quizLevels;
+    if(staff.length === 0) return `<p class="meta">ยังไม่มีพนักงานในระบบ</p>`;
+    const rows = staff.map(e => `
+      <tr>
+        <td>${e.name}</td>
+        ${levels.map(l => {
+          const cert = getCertification(e.id, l.id);
+          if(!cert) return `<td><span class="chip neutral">ยังไม่ทำ</span></td>`;
+          return cert.passed
+            ? `<td><span class="chip full">ผ่าน ${cert.scorePercent}%</span></td>`
+            : `<td><span class="chip part">ไม่ผ่าน ${cert.scorePercent}%</span></td>`;
+        }).join("")}
+      </tr>`).join("");
+    return `
+      <table>
+        <thead><tr><th>ชื่อ</th>${levels.map(l => `<th>${l.name}</th>`).join("")}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function renderMcCertificationOwner(){
+    if(mcAdminLevelId){
+      const level = data.quizLevels.find(l => l.id === mcAdminLevelId);
+      const choiceLabels = {a:"ก",b:"ข",c:"ค",d:"ง"};
+      const rows = mcAdminQuestions.map((q,i) => `
+        <tr>
+          <td>${i+1}. ${q.questionText}</td>
+          <td>${choiceLabels[q.correctChoice]}</td>
+          <td>
+            <button class="btn ghost sm" onclick="openQuizQuestionModal(${q.id})">แก้ไข</button>
+            <button class="btn ghost sm" onclick="deleteQuizQuestion(${q.id})">ลบ</button>
+          </td>
+        </tr>`).join("") || `<tr><td colspan="3">ยังไม่มีคำถามในระดับนี้</td></tr>`;
+      return `
+        <div class="card">
+          <div class="toolbar">
+            <h3 style="margin:0;">คำถามของ "${level ? level.name : ""}"</h3>
+            <div style="display:flex;gap:8px;">
+              <button class="btn ghost" onclick="closeLevelQuestions()">← กลับ</button>
+              <button class="btn" onclick="openQuizQuestionModal()">+ เพิ่มคำถาม</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>คำถาม</th><th>คำตอบ</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    const levelRows = data.quizLevels.map(l => `
+      <tr>
+        <td><input id="level-name-${l.id}" value="${l.name}"></td>
+        <td><input type="number" id="level-passing-${l.id}" value="${l.passingScorePercent}" style="width:90px;" min="0" max="100"></td>
+        <td>
+          <button class="btn ghost sm" onclick="saveQuizLevel(${l.id})">บันทึก</button>
+          <button class="btn ghost sm" onclick="openLevelQuestions(${l.id})">จัดการคำถาม</button>
+        </td>
+      </tr>`).join("");
+
+    return `
+      <div class="card">
+        <h3 style="margin-top:0;">ระดับการรับรอง MC</h3>
+        <p class="meta" style="margin-top:-8px;">ผ่านบททดสอบระดับไหน ระบบแค่ติดตามให้เห็น ไม่ได้บังคับห้ามเริ่มไลฟ์</p>
+        <table>
+          <thead><tr><th>ชื่อระดับ</th><th>เกณฑ์ผ่าน (%)</th><th></th></tr></thead>
+          <tbody>${levelRows}</tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">สถานะการรับรองของพนักงาน</h3>
+        ${renderCertificationOverviewTable()}
+      </div>`;
+  }
+
+  async function saveQuizLevel(id){
+    const name = document.getElementById(`level-name-${id}`).value.trim();
+    const passing = Number(document.getElementById(`level-passing-${id}`).value);
+    if(!name || isNaN(passing) || passing < 0 || passing > 100){
+      showToast("กรอกชื่อระดับและเกณฑ์ผ่าน (0-100) ให้ถูกต้อง", "error");
+      return;
+    }
+    const level = data.quizLevels.find(l => l.id === id);
+    const { error } = await sb.rpc("rpc_upsert_quiz_level", {
+      p_code: myCode, p_id: id, p_name: name, p_sort_order: level.sortOrder, p_passing_score_percent: passing
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+    await refreshAllData();
+    showToast("บันทึกระดับเรียบร้อย", "success");
+    renderPage("mc-certification");
+  }
+
+  async function openLevelQuestions(levelId){
+    const { data: rows, error } = await sb.rpc("rpc_get_quiz_questions_admin", { p_code: myCode, p_level_id: levelId });
+    if(error){ showToast("โหลดคำถามไม่สำเร็จ: " + error.message, "error"); return; }
+    mcAdminLevelId = levelId;
+    mcAdminQuestions = (rows || []).map(q => ({
+      id: q.id, levelId: q.level_id, questionText: q.question_text,
+      choiceA: q.choice_a, choiceB: q.choice_b, choiceC: q.choice_c, choiceD: q.choice_d,
+      correctChoice: q.correct_choice, sortOrder: q.sort_order
+    }));
+    renderPage("mc-certification");
+  }
+  function closeLevelQuestions(){
+    mcAdminLevelId = null;
+    mcAdminQuestions = [];
+    renderPage("mc-certification");
+  }
+
+  function openQuizQuestionModal(id){
+    const modal = document.getElementById("quiz-question-modal");
+    document.getElementById("quiz-question-level-id").value = mcAdminLevelId;
+    if(id){
+      const q = mcAdminQuestions.find(x => x.id === id);
+      document.getElementById("quiz-question-modal-title").textContent = "แก้ไขคำถาม";
+      document.getElementById("quiz-question-id").value = q.id;
+      document.getElementById("quiz-question-text").value = q.questionText;
+      document.getElementById("quiz-choice-a").value = q.choiceA;
+      document.getElementById("quiz-choice-b").value = q.choiceB;
+      document.getElementById("quiz-choice-c").value = q.choiceC;
+      document.getElementById("quiz-choice-d").value = q.choiceD;
+      document.getElementById("quiz-correct-choice").value = q.correctChoice;
+    } else {
+      document.getElementById("quiz-question-modal-title").textContent = "เพิ่มคำถาม";
+      document.getElementById("quiz-question-id").value = "";
+      document.getElementById("quiz-question-text").value = "";
+      document.getElementById("quiz-choice-a").value = "";
+      document.getElementById("quiz-choice-b").value = "";
+      document.getElementById("quiz-choice-c").value = "";
+      document.getElementById("quiz-choice-d").value = "";
+      document.getElementById("quiz-correct-choice").value = "a";
+    }
+    modal.classList.add("active");
+  }
+  function closeQuizQuestionModal(){
+    document.getElementById("quiz-question-modal").classList.remove("active");
+  }
+  async function saveQuizQuestion(){
+    const id = document.getElementById("quiz-question-id").value;
+    const levelId = Number(document.getElementById("quiz-question-level-id").value);
+    const questionText = document.getElementById("quiz-question-text").value.trim();
+    const choiceA = document.getElementById("quiz-choice-a").value.trim();
+    const choiceB = document.getElementById("quiz-choice-b").value.trim();
+    const choiceC = document.getElementById("quiz-choice-c").value.trim();
+    const choiceD = document.getElementById("quiz-choice-d").value.trim();
+    const correctChoice = document.getElementById("quiz-correct-choice").value;
+    if(!questionText || !choiceA || !choiceB || !choiceC || !choiceD){
+      showToast("กรอกคำถามและตัวเลือกให้ครบ", "error");
+      return;
+    }
+    const sortOrder = id ? mcAdminQuestions.find(q => q.id === Number(id)).sortOrder : mcAdminQuestions.length;
+    const { error } = await sb.rpc("rpc_upsert_quiz_question", {
+      p_code: myCode, p_id: id ? Number(id) : null, p_level_id: levelId, p_question_text: questionText,
+      p_choice_a: choiceA, p_choice_b: choiceB, p_choice_c: choiceC, p_choice_d: choiceD,
+      p_correct_choice: correctChoice, p_sort_order: sortOrder
+    });
+    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+    closeQuizQuestionModal();
+    await openLevelQuestions(levelId);
+  }
+  async function deleteQuizQuestion(id){
+    if(pendingDeleteQuestionId !== id){
+      pendingDeleteQuestionId = id;
+      showToast("กดลบอีกครั้งเพื่อยืนยันการลบ", "warn");
+      return;
+    }
+    pendingDeleteQuestionId = null;
+    const { error } = await sb.rpc("rpc_delete_quiz_question", { p_code: myCode, p_id: id });
+    if(error){ showToast("ลบไม่สำเร็จ: " + error.message, "error"); return; }
+    await openLevelQuestions(mcAdminLevelId);
+  }
+
+  function renderMcCertificationStaff(){
+    if(mcTakingLevelId){
+      return renderQuizTakingForm();
+    }
+    const levelRows = data.quizLevels.map(l => {
+      const cert = getCertification(currentEmployee.id, l.id);
+      let statusHtml;
+      if(!cert) statusHtml = `<span class="chip neutral">ยังไม่เคยทำ</span>`;
+      else if(cert.passed) statusHtml = `<span class="chip full">ผ่านแล้ว ${cert.scorePercent}%</span>`;
+      else statusHtml = `<span class="chip part">ยังไม่ผ่าน ${cert.scorePercent}%</span>`;
+      return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <h3 style="margin:0 0 6px;">${l.name}</h3>
+              ${statusHtml}
+            </div>
+            <button class="btn" onclick="startQuiz(${l.id})">เริ่มทำแบบทดสอบ</button>
+          </div>
+        </div>`;
+    }).join("") || `<div class="card"><p class="meta">ยังไม่มีระดับให้ทดสอบ</p></div>`;
+    return levelRows;
+  }
+
+  async function startQuiz(levelId){
+    const { data: rows, error } = await sb.rpc("rpc_get_quiz_questions", { p_code: myCode, p_level_id: levelId });
+    if(error){ showToast("โหลดคำถามไม่สำเร็จ: " + error.message, "error"); return; }
+    if(!rows || rows.length === 0){ showToast("ระดับนี้ยังไม่มีคำถาม รอเจ้าของเพิ่มก่อน", "warn"); return; }
+    mcTakingLevelId = levelId;
+    mcQuizQuestions = rows.map(q => ({
+      id: q.id, questionText: q.question_text,
+      choiceA: q.choice_a, choiceB: q.choice_b, choiceC: q.choice_c, choiceD: q.choice_d
+    }));
+    mcQuizAnswers = {};
+    mcQuizResult = null;
+    renderPage("mc-certification");
+  }
+  function selectQuizAnswer(questionId, choice){
+    mcQuizAnswers[questionId] = choice;
+    renderPage("mc-certification");
+  }
+  function closeQuiz(){
+    mcTakingLevelId = null;
+    mcQuizQuestions = [];
+    mcQuizAnswers = {};
+    mcQuizResult = null;
+    renderPage("mc-certification");
+  }
+  async function submitQuiz(){
+    const unanswered = mcQuizQuestions.filter(q => !mcQuizAnswers[q.id]);
+    if(unanswered.length > 0){
+      showToast("กรุณาตอบให้ครบทุกข้อ", "error");
+      return;
+    }
+    const answers = mcQuizQuestions.map(q => ({ question_id: q.id, choice: mcQuizAnswers[q.id] }));
+    const { data: result, error } = await sb.rpc("rpc_submit_quiz_attempt", {
+      p_code: myCode, p_level_id: mcTakingLevelId, p_answers: answers
+    });
+    if(error){ showToast("ส่งคำตอบไม่สำเร็จ: " + error.message, "error"); return; }
+    mcQuizResult = result;
+    await refreshAllData();
+    renderPage("mc-certification");
+  }
+  function renderQuizTakingForm(){
+    const level = data.quizLevels.find(l => l.id === mcTakingLevelId);
+    if(mcQuizResult){
+      return `
+        <div class="card">
+          <h3 style="margin-top:0;">ผลการทดสอบ — ${level ? level.name : ""}</h3>
+          <div class="grid cols-3">
+            <div><div class="stat-label">คะแนน</div><div class="stat-value">${mcQuizResult.score_percent}%</div></div>
+            <div><div class="stat-label">ตอบถูก</div><div class="stat-value">${mcQuizResult.correct_count}/${mcQuizResult.total_questions}</div></div>
+            <div><div class="stat-label">ผลลัพธ์</div><div class="stat-value" style="color:${mcQuizResult.passed ? "var(--success)" : "var(--danger)"};font-size:20px;">${mcQuizResult.passed ? "ผ่าน ✓" : "ไม่ผ่าน"}</div></div>
+          </div>
+          <button class="btn ghost" style="margin-top:14px;" onclick="closeQuiz()">← กลับไปหน้ารายการระดับ</button>
+        </div>`;
+    }
+    const choiceLabels = {a:"ก",b:"ข",c:"ค",d:"ง"};
+    const questionsHtml = mcQuizQuestions.map((q,i) => `
+      <div class="card">
+        <p style="font-weight:600;margin-top:0;">${i+1}. ${q.questionText}</p>
+        ${["a","b","c","d"].map(c => `
+          <label style="display:block;padding:8px 0;cursor:pointer;">
+            <input type="radio" name="quiz-q-${q.id}" ${mcQuizAnswers[q.id] === c ? "checked" : ""} onclick="selectQuizAnswer(${q.id}, '${c}')">
+            ${choiceLabels[c]}. ${choiceText(q, c)}
+          </label>`).join("")}
+      </div>`).join("");
+    return `
+      <div class="card" style="border:none;box-shadow:none;background:transparent;padding-bottom:0;">
+        <div class="toolbar">
+          <h3 style="margin:0;">แบบทดสอบ — ${level ? level.name : ""}</h3>
+          <button class="btn ghost" onclick="closeQuiz()">ยกเลิก</button>
+        </div>
+      </div>
+      ${questionsHtml}
+      <div class="card">
+        <button class="btn" onclick="submitQuiz()">ส่งคำตอบ</button>
+      </div>`;
   }
 
   // ===== helpers =====
@@ -1422,12 +1913,14 @@
       document.getElementById("product-name").value = p.name;
       document.getElementById("product-price").value = p.price;
       document.getElementById("product-stock").value = p.stockQty;
+      document.getElementById("product-description").value = p.description || "";
     } else {
       document.getElementById("product-modal-title").textContent = "เพิ่มสินค้า";
       document.getElementById("product-id").value = "";
       document.getElementById("product-name").value = "";
       document.getElementById("product-price").value = "";
       document.getElementById("product-stock").value = "";
+      document.getElementById("product-description").value = "";
     }
     modal.classList.add("active");
   }
@@ -1439,12 +1932,13 @@
     const name = document.getElementById("product-name").value.trim();
     const price = Number(document.getElementById("product-price").value);
     const stockQty = Number(document.getElementById("product-stock").value);
+    const description = document.getElementById("product-description").value.trim() || null;
     if(!name || !price || price <= 0 || isNaN(stockQty) || stockQty < 0){
       showToast("กรอกชื่อ ราคา และจำนวนคงเหลือให้ครบและถูกต้อง", "error");
       return;
     }
     const { error } = await sb.rpc("rpc_upsert_product", {
-      p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_price: price, p_stock: stockQty
+      p_code: myCode, p_id: id ? Number(id) : null, p_name: name, p_price: price, p_stock: stockQty, p_description: description
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
