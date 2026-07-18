@@ -114,6 +114,7 @@
 
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow-md);}
   .card + .card{margin-top:16px;}
+  .day-pick{display:flex;align-items:center;gap:4px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 9px;cursor:pointer;}
   .hr-card{cursor:pointer;transition:border-color .12s ease,box-shadow .12s ease,transform .12s ease;}
   .hr-card:hover{border-color:var(--accent);box-shadow:0 6px 20px rgba(68,39,31,.10);transform:translateY(-1px);}
   .hr-card .hr-open-hint{color:var(--accent);font-size:12.5px;font-weight:700;white-space:nowrap;}
@@ -358,9 +359,33 @@
       <div class="field"><label>วันที่</label><input id="session-date" type="date"></div>
       <div class="field"><label>เวลาเริ่ม</label><input id="session-start" type="time"></div>
       <div class="field"><label>เวลาจบ</label><input id="session-end" type="time"></div>
+      <div id="session-repeat-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+        <div class="field">
+          <label>ลงตารางล่วงหน้า (ทำซ้ำ)</label>
+          <select id="session-repeat" onchange="toggleRepeatDays()">
+            <option value="1">ไม่ทำซ้ำ (วันเดียว)</option>
+            <option value="7">ทำซ้ำ 7 วัน (1 สัปดาห์)</option>
+            <option value="14">ทำซ้ำ 14 วัน (2 สัปดาห์)</option>
+            <option value="30">ทำซ้ำ 30 วัน (1 เดือน)</option>
+          </select>
+        </div>
+        <div class="field" id="session-repeat-days-field" style="display:none;">
+          <label>เฉพาะวัน</label>
+          <div id="session-repeat-days" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="0" checked>อา</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="1" checked>จ</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="2" checked>อ</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="3" checked>พ</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="4" checked>พฤ</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="5" checked>ศ</label>
+            <label class="day-pick"><input type="checkbox" class="repeat-day" value="6" checked>ส</label>
+          </div>
+          <span class="meta" style="font-size:11.5px;">ติ๊กเฉพาะวันที่ต้องการ (เช่น เอาออกวันอาทิตย์ถ้าหยุด)</span>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn ghost" onclick="closeSessionModal()">ยกเลิก</button>
-        <button class="btn" onclick="saveSession()">บันทึก</button>
+        <button class="btn" id="session-save-btn" onclick="saveSession()">บันทึก</button>
       </div>
     </div>
   </div>
@@ -982,6 +1007,7 @@
           <div><div class="stat-label">รวมเวลาที่สาย</div><div class="stat-value" style="font-size:19px;">${disc.lateTotalMin ? formatMinutes(disc.lateTotalMin) : "-"}</div></div>
           <div><div class="stat-label">ไลฟ์ไม่ครบเวลา</div><div class="stat-value" style="color:${disc.shortCount ? "var(--danger)" : "var(--text)"};">${disc.shortCount} ครั้ง</div></div>
         </div>
+        ${disc.closedLateCount ? `<p class="meta" style="margin-top:10px;color:var(--warn);">⚠️ ปิดไลฟ์ช้ากว่าเวลานัดเกิน ${CLOSE_GRACE_MIN} นาที ${disc.closedLateCount} ครั้ง — อาจลืมกดปิด ทำให้เวลาไลฟ์รอบนั้นยาวเกินจริง</p>` : ""}
         <p class="meta" style="margin-top:10px;">นับจากรอบที่เช็คอินแล้วทั้งหมด · ผ่อนผันเข้าสายไม่เกิน ${LATE_GRACE_MIN} นาที</p>
         <div class="stat-label" style="margin-top:16px;margin-bottom:6px;">รอบล่าสุด</div>
         ${recentSessionsHtml(empSessions, false)}
@@ -1678,6 +1704,24 @@
     if(isNaN(scheduled.getTime()) || isNaN(actual.getTime())) return null;
     return Math.round((actual - scheduled) / 60000);
   }
+  // ===== ลืมกดปิดไลฟ์: เลยเวลาจบที่นัดไว้แล้วแต่ยังสถานะ "กำลังไลฟ์"
+  // สำคัญตอนส่งกะ เพราะถ้าไม่ปิด เวลาไลฟ์จะยาวเกินจริงจนสถิติเชื่อไม่ได้
+  const CLOSE_GRACE_MIN = 15;
+  function overdueMinutes(s){
+    if(!s || !s.date || !s.endTime) return null;
+    const end = new Date(s.date + "T" + String(s.endTime).slice(0,5) + ":00");
+    if(isNaN(end.getTime())) return null;
+    return Math.round((Date.now() - end.getTime()) / 60000);
+  }
+  function isOverdueLive(s){
+    if(!s || s.status !== "กำลังไลฟ์") return false;
+    const over = overdueMinutes(s);
+    return over !== null && over > CLOSE_GRACE_MIN;
+  }
+  function overdueDisplay(s){
+    if(!isOverdueLive(s)) return "";
+    return ` <span class="status-chip live">⚠️ ยังไม่ปิดไลฟ์ (เลยเวลา ${formatMinutes(overdueMinutes(s))})</span>`;
+  }
   function lateDisplay(s){
     const late = lateMinutes(s);
     if(late === null) return "";
@@ -1686,16 +1730,19 @@
   }
   // สรุปวินัยของพนักงานคนหนึ่งจากรอบไลฟ์ที่เช็คอินแล้ว
   function disciplineStats(sessions){
-    let lateCount = 0, lateTotalMin = 0, shortCount = 0;
+    let lateCount = 0, lateTotalMin = 0, shortCount = 0, closedLateCount = 0;
     sessions.forEach(s => {
       const late = lateMinutes(s);
       if(late !== null && late > LATE_GRACE_MIN){ lateCount++; lateTotalMin += late; }
       if(s.status === "จบแล้ว" && s.checkInTime && s.actualEndTime){
         const actualMin = Math.round((new Date(s.actualEndTime) - new Date(s.checkInTime)) / 60000);
         if(actualMin < durationMinutesFromRange(s.startTime, s.endTime)) shortCount++;
+        // ปิดไลฟ์ช้ากว่าเวลานัดมาก = น่าจะลืมกดปิด → เวลาไลฟ์รอบนั้นเชื่อไม่ได้เต็มร้อย
+        const schedEnd = new Date(s.date + "T" + String(s.endTime).slice(0,5) + ":00");
+        if(!isNaN(schedEnd.getTime()) && (new Date(s.actualEndTime) - schedEnd) / 60000 > CLOSE_GRACE_MIN) closedLateCount++;
       }
     });
-    return { lateCount, lateTotalMin, shortCount };
+    return { lateCount, lateTotalMin, shortCount, closedLateCount };
   }
 
   // ===== สำรองข้อมูล (เจ้าของเท่านั้น) — ดาวน์โหลดทุกตารางเป็น CSV ไฟล์เดียว เปิดด้วย Excel ได้
@@ -1937,7 +1984,7 @@
           </div>
           <span class="status-chip ${statusClass}">${s.status}</span>
         </div>
-        <div class="meta">${actualDurationDisplay(s)}${lateDisplay(s)} · ${orderCount} ออเดอร์บันทึกแล้ว</div>
+        <div class="meta">${actualDurationDisplay(s)}${lateDisplay(s)}${overdueDisplay(s)} · ${orderCount} ออเดอร์บันทึกแล้ว</div>
         ${photosHtml}
         ${actionHtml ? `<div style="margin-top:12px;">${actionHtml}</div>` : ""}
       </div>`;
@@ -1968,7 +2015,16 @@
       document.getElementById("session-start").value = "";
       document.getElementById("session-end").value = "";
     }
+    // "ทำซ้ำ" ใช้ได้เฉพาะตอนเพิ่มใหม่ — ตอนแก้ไขรอบเดิมให้ซ่อนไว้
+    document.getElementById("session-repeat-field").style.display = id ? "none" : "block";
+    document.getElementById("session-repeat").value = "1";
+    document.querySelectorAll(".repeat-day").forEach(c => { c.checked = true; });
+    toggleRepeatDays();
     document.getElementById("session-modal").classList.add("active");
+  }
+  function toggleRepeatDays(){
+    const n = Number(document.getElementById("session-repeat").value || 1);
+    document.getElementById("session-repeat-days-field").style.display = n > 1 ? "block" : "none";
   }
   function closeSessionModal(){
     document.getElementById("session-modal").classList.remove("active");
@@ -1989,14 +2045,45 @@
     const startTime = document.getElementById("session-start").value;
     const endTime = document.getElementById("session-end").value;
     if(!date || !startTime || !endTime){ showToast("กรอกวันที่และเวลาให้ครบ", "error"); return; }
-    const { error } = await sb.rpc("rpc_save_session", {
-      p_code: myCode, p_id: id ? Number(id) : null, p_employee_id: employeeId, p_platform: platform,
-      p_date: date, p_start: startTime, p_end: endTime
-    });
-    if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
+
+    // ลงตารางล่วงหน้า: ทำซ้ำได้เฉพาะตอน "เพิ่มใหม่" (แก้ไขรอบเดิมทำซ้ำไม่ได้)
+    const repeatDays = id ? 1 : Number(document.getElementById("session-repeat").value || 1);
+    const pickedDows = id ? null : [...document.querySelectorAll(".repeat-day:checked")].map(c => Number(c.value));
+    const dates = [];
+    if(repeatDays > 1){
+      if(!pickedDows.length){ showToast("เลือกวันในสัปดาห์อย่างน้อย 1 วัน", "error"); return; }
+      const base = new Date(date + "T00:00:00");
+      for(let i = 0; i < repeatDays; i++){
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+        if(pickedDows.includes(d.getDay())){
+          const p = n => String(n).padStart(2,"0");
+          dates.push(d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate()));
+        }
+      }
+    } else {
+      dates.push(date);
+    }
+
+    const btn = document.getElementById("session-save-btn");
+    btn.disabled = true;
+    let saved = 0, failed = 0, lastErr = "";
+    for(const d of dates){
+      btn.textContent = dates.length > 1 ? `กำลังลงตาราง ${saved + failed + 1}/${dates.length}...` : "กำลังบันทึก...";
+      const { error } = await sb.rpc("rpc_save_session", {
+        p_code: myCode, p_id: id ? Number(id) : null, p_employee_id: employeeId, p_platform: platform,
+        p_date: d, p_start: startTime, p_end: endTime
+      });
+      if(error){ failed++; lastErr = error.message; } else { saved++; }
+    }
+    btn.disabled = false; btn.textContent = "บันทึก";
+
+    if(saved === 0){ showToast("บันทึกไม่สำเร็จ: " + lastErr, "error"); return; }
     await refreshAllData();
     closeSessionModal();
     renderPage("live-schedule");
+    if(dates.length > 1){
+      showToast(`ลงตารางแล้ว ${saved} รอบ` + (failed ? ` (ไม่สำเร็จ ${failed} รอบ)` : ""), failed ? "warn" : "success");
+    }
   }
 
   let pendingDeleteSessionId = null;
