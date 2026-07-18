@@ -114,6 +114,9 @@
 
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow-md);}
   .card + .card{margin-top:16px;}
+  .hr-card{cursor:pointer;transition:border-color .12s ease,box-shadow .12s ease,transform .12s ease;}
+  .hr-card:hover{border-color:var(--accent);box-shadow:0 6px 20px rgba(68,39,31,.10);transform:translateY(-1px);}
+  .hr-card .hr-open-hint{color:var(--accent);font-size:12.5px;font-weight:700;white-space:nowrap;}
   .grid{display:grid;gap:16px;}
   .grid.cols-3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));}
   .stat-label{font-size:12.5px;color:var(--text-sub);margin-bottom:7px;font-weight:600;letter-spacing:.02em;}
@@ -253,8 +256,8 @@
       <button onclick="attemptLogin()">เข้าสู่ระบบ</button>
       <div class="login-error" id="login-error"></div>
       <div class="login-hint">
-        รหัสทดลองใช้ (ลบออกได้ทีหลัง):<br>
-        เจ้าของ: <b>0000</b> · พนักงาน TikTok: <b>1111</b> · พนักงาน Shopee: <b>2222</b>
+        ใส่รหัสพนักงานของคุณเพื่อเข้าสู่ระบบ<br>
+        ลืมรหัส? ติดต่อเจ้าของร้าน
       </div>
     </div>
   </div>
@@ -304,6 +307,14 @@
           </select>
         </div>
         <div class="field" id="emp-salary-field"><label>เงินเดือนฐาน (บาท)</label><input id="emp-salary" type="number"></div>
+        <div class="field" id="emp-commission-field">
+          <label>ค่าคอมมิชชั่น</label>
+          <select id="emp-commission">
+            <option value="no">ไม่มีค่าคอม</option>
+            <option value="yes">มีค่าคอม</option>
+          </select>
+          <span class="meta" style="font-size:11.5px;">ถ้า "มี" ระบบคิดจาก ยอดขายเดือนนั้น × ขั้นบันไดค่าคอมของช่องทางคนนี้ (ตั้งตารางที่หน้า "เงินเดือน & ค่าคอม") · เปิด/ปิดได้ทีหลัง</span>
+        </div>
         <div class="field" id="emp-payment-freq-field"><label>ความถี่รับเงิน</label>
           <select id="emp-payment-freq">
             <option value="daily">รายวัน</option>
@@ -471,13 +482,13 @@
   function mapEmployee(r){
     return {
       id:r.id, name:r.name, role:r.role, code:r.code, platform:r.platform,
-      employmentType:r.employment_type, baseSalary:r.base_salary,
+      employmentType:r.employment_type, baseSalary:r.base_salary, hasCommission:r.has_commission,
       idCardNumber:r.id_card_number, idCardPhoto:r.id_card_photo, bankName:r.bank_name,
       bankAccountNumber:r.bank_account_number, bankAccountName:r.bank_account_name,
       paymentFrequency:r.payment_frequency, address:r.address, notes:r.notes
     };
   }
-  function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order}; }
+  function mapTier(r){ return {id:r.id, minSales:r.min_sales, maxSales:r.max_sales, ratePercent:r.rate_percent, sortOrder:r.sort_order, platform:r.platform}; }
   function mapProduct(r){ return {id:r.id, name:r.name, price:r.price, stockQty:r.stock_qty, description:r.description}; }
   function mapSession(r){ return {id:r.id, employeeId:r.employee_id, platform:r.platform, date:r.date, startTime:r.start_time, endTime:r.end_time, status:r.status, checkInPhoto:r.check_in_photo, checkInTime:r.check_in_time, salesProofPhoto:r.sales_proof_photo, actualEndTime:r.actual_end_time, deleteRequested:r.delete_requested}; }
   function mapOrder(r){ return {id:r.id, liveSessionId:r.live_session_id, employeeId:r.employee_id, platform:r.platform, productId:r.product_id, productName:r.product_name, qty:r.qty, pricePerUnit:r.price_per_unit, total:r.total, customerName:r.customer_name, timestamp:r.created_at, deleteRequested:r.delete_requested}; }
@@ -637,9 +648,12 @@
     return orders.reduce((acc,o) => { acc[o.platform] = (acc[o.platform]||0) + o.total; return acc; }, {tiktok:0, shopee:0});
   }
 
+  // ค่าคอม = เปิดสวิตช์รายคน (emp.hasCommission) แล้วคิดจากยอดขายเดือนนั้น
+  // เทียบกับ "ขั้นบันไดค่าคอมของช่องทางคนนั้น" (tiktok/shopee แยกตาราง)
+  // คนที่ปิดสวิตช์ = ไม่มีค่าคอม → คืน null
   function commissionForEmployee(emp, totalSales){
-    if(emp.employmentType !== "full-time") return null;
-    const tier = findMatchingTier(totalSales);
+    if(!emp.hasCommission) return null;
+    const tier = findMatchingTier(emp.platform, totalSales);
     return tier ? totalSales * tier.ratePercent / 100 : 0;
   }
   function defaultDashboardRangeStart(){
@@ -675,7 +689,7 @@
       }).join("");
       peopleTable = `
         <table style="margin-top:14px;"><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ยอดขายช่วงนี้</th><th>ค่าคอมประมาณการ</th></tr></thead><tbody>${rows}</tbody></table>
-        <p class="meta" style="margin-top:8px;">*ค่าคอมประมาณการคำนวณจากยอดขายรวมเฉพาะช่วงที่เลือก เทียบกับตารางขั้นบันได ใช้ดูภาพรวมเท่านั้น — ยอดค่าคอมจริงคำนวณจากยอดขายรวมทั้งเดือนปฏิทินที่หน้า "เงินเดือน & ค่าคอม"</p>`;
+        <p class="meta" style="margin-top:8px;">*ค่าคอมประมาณการคำนวณจากยอดขายเฉพาะช่วงที่เลือก × ขั้นบันไดค่าคอมของช่องทาง (เฉพาะคนที่เปิดค่าคอม) ใช้ดูภาพรวมเท่านั้น — ยอดจริงคำนวณจากยอดขายรวมทั้งเดือนปฏิทินที่หน้า "เงินเดือน & ค่าคอม"</p>`;
     }
     return `
       <div class="grid cols-3" style="margin-top:14px;">
@@ -764,7 +778,7 @@
         <div class="card">
           <h3 style="margin-top:0;">ยอดขายรายคน (แยกเป็นคนๆ ไม่ปนกันแม้อยู่แพลตฟอร์มเดียวกัน)</h3>
           <table><thead><tr><th>ชื่อ</th><th>แพลตฟอร์ม</th><th>ประเภท</th><th>ยอดวันนี้</th><th>ยอดเดือนนี้</th><th>ค่าคอม (เดือนนี้)</th></tr></thead><tbody>${rows}</tbody></table>
-          <p class="meta" style="margin-top:8px;">*ค่าคอมคิดเฉพาะพนักงานประจำ TikTok จากยอดขายรวมทั้งเดือนเทียบกับตารางขั้นบันได</p>
+          <p class="meta" style="margin-top:8px;">*ค่าคอมคิดจากยอดขายรวมทั้งเดือน × ขั้นบันไดค่าคอมของช่องทางคนนั้น (TikTok/Shopee แยกตาราง) · เฉพาะคนที่เปิดสวิตช์ "มีค่าคอม" · คนที่ปิด = ไม่มีค่าคอม (แสดง -)</p>
         </div>
         <div class="card">
           <h3 style="margin-top:0;">เลือกช่วงวันที่เอง</h3>
@@ -806,7 +820,7 @@
         <td>${e.code || "-"}</td>
         <td>${e.role === "owner" ? '<span class="chip owner">เจ้าของ</span>' : `<span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>`}</td>
         <td>${e.employmentType ? `<span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>` : "-"}</td>
-        <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : (e.paymentFrequency ? `<span class="chip neutral">${e.paymentFrequency === "daily" ? "รายวัน" : "รายสัปดาห์"}</span>` : "-")}</td>
+        <td>${e.baseSalary ? "฿" + e.baseSalary.toLocaleString() : (e.paymentFrequency ? `<span class="chip neutral">${e.paymentFrequency === "daily" ? "รายวัน" : "รายสัปดาห์"}</span>` : "-")}${e.role === "staff" ? `<br><span class="meta" style="font-size:11.5px;">${e.hasCommission ? "✓ มีค่าคอม" : "ไม่มีค่าคอม"}</span>` : ""}</td>
         <td style="max-width:220px;">${e.notes ? `<span class="meta" title="${e.notes.replace(/"/g, "&quot;")}">📝 ${e.notes.length > 30 ? e.notes.slice(0,30) + "…" : e.notes}</span>` : `<span class="meta">-</span>`}</td>
         <td style="display:flex;gap:8px;">
           <button class="btn ghost sm" onclick="openEmpModal(${e.id})">แก้ไข</button>
@@ -833,16 +847,19 @@
       return `<div class="card"><p class="meta">ยังไม่มีพนักงานในระบบ</p></div>`;
     }
     const cards = staff.map(e => `
-      <div class="card">
+      <div class="card hr-card" onclick="openHrDetail(${e.id})">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
           <div>
             <h3 style="margin:0 0 6px;">${e.name}</h3>
             <span class="chip ${e.platform}">${e.platform === "tiktok" ? "TikTok" : "Shopee"}</span>
             <span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>
           </div>
-          ${isProfileComplete(e)
-            ? `<span class="chip full">ข้อมูลครบ ✓</span>`
-            : `<span class="chip part">⚠️ ข้อมูลไม่ครบ</span>`}
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+            ${isProfileComplete(e)
+              ? `<span class="chip full">ข้อมูลครบ ✓</span>`
+              : `<span class="chip part">⚠️ ข้อมูลไม่ครบ</span>`}
+            <span class="hr-open-hint">ดูภาพรวม →</span>
+          </div>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;align-items:flex-start;">
           ${e.idCardPhoto
@@ -859,9 +876,129 @@
       </div>`).join("");
     return `
       <div class="card" style="margin-bottom:0;padding-bottom:0;border:none;box-shadow:none;background:transparent;">
-        <p class="meta" style="padding:0 0 14px;">ข้อมูลนี้พนักงานกรอกเองที่หน้า "ข้อมูลส่วนตัว" — ใช้ดูสำหรับจัดส่งของและทำจ่ายเงินเดือน</p>
+        <p class="meta" style="padding:0 0 14px;">ข้อมูลนี้พนักงานกรอกเองที่หน้า "ข้อมูลส่วนตัว" — แตะการ์ดพนักงานเพื่อดู "ภาพรวมรายคน" (ยอดขาย/รอบไลฟ์/ค่าคอม/บททดสอบ)</p>
       </div>
       ${cards}`;
+  }
+
+  function openHrDetail(empId){
+    document.getElementById("page-content").innerHTML = renderHrDetail(empId);
+    window.scrollTo(0, 0);
+  }
+
+  function renderHrDetail(empId){
+    const e = getEmployeeById(empId);
+    if(!e) return renderHrProfiles();
+    const monthStr = new Date().toISOString().slice(0,7);
+
+    // ----- ยอดขาย -----
+    const empOrders = data.orders.filter(o => o.employeeId === empId);
+    const monthOrders = empOrders.filter(o => o.timestamp.slice(0,7) === monthStr);
+    const totalAll = empOrders.reduce((s,o) => s + o.total, 0);
+    const totalMonth = monthOrders.reduce((s,o) => s + o.total, 0);
+
+    // ----- รอบไลฟ์ & การเข้างาน -----
+    const empSessions = data.liveSessions.filter(s => s.employeeId === empId);
+    const doneCount = empSessions.filter(s => s.status === "จบแล้ว").length;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const missedAll = empSessions.filter(s => s.status === "นัดหมาย" && new Date(s.date + "T00:00:00") < today).length;
+    const upcomingCount = empSessions.filter(s => s.status === "นัดหมาย" && new Date(s.date + "T00:00:00") >= today).length;
+
+    // ----- เงินเดือน & ค่าคอม -----
+    const isFull = e.employmentType === "full-time";
+    const cTier = e.hasCommission ? findMatchingTier(e.platform, totalMonth) : null;
+    const commission = e.hasCommission ? totalMonth * (cTier ? cTier.ratePercent : 0) / 100 : 0;
+    const base = e.baseSalary || 0;
+    const absentDays = isFull ? countAbsentDays(empId, monthStr) : 0;
+    const deduction = Math.round((base / 30) * absentDays);
+    const net = base + commission - deduction;
+    const cRateText = !e.hasCommission ? "ไม่มีค่าคอม"
+      : (cTier ? cTier.ratePercent + "%" : "ยอดยังไม่ถึงขั้น/ยังไม่ตั้งตาราง");
+    let payrollHtml = `
+        <div class="grid cols-3">
+          <div><div class="stat-label">ยอดขายเดือนนี้</div><div class="stat-value">฿${totalMonth.toLocaleString()}</div></div>
+          <div><div class="stat-label">ขั้นค่าคอม (${platformLabel(e.platform)})</div><div class="stat-value" style="font-size:16px;">${cRateText}</div></div>
+          <div><div class="stat-label">ค่าคอมประมาณการ</div><div class="stat-value">฿${commission.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+        </div>
+        <div class="grid cols-3" style="margin-top:16px;">
+          <div><div class="stat-label">เงินเดือนฐาน</div><div class="stat-value">${isFull ? "฿" + base.toLocaleString() : "<span style='font-size:15px;color:var(--text-sub)'>พาร์ทไทม์</span>"}</div></div>
+          <div><div class="stat-label">วันขาด / หัก</div><div class="stat-value" style="color:var(--danger);">${absentDays} วัน · -฿${deduction.toLocaleString()}</div></div>
+          <div><div class="stat-label">${isFull ? "เงินเดือนสุทธิ" : "ค่าคอมสุทธิ"}</div><div class="stat-value">฿${net.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+        </div>
+        <p class="meta" style="margin-top:14px;">${isFull ? `ฐาน ฿${base.toLocaleString()} + ` : ""}ค่าคอม ฿${commission.toLocaleString(undefined,{maximumFractionDigits:0})}${isFull ? ` − หัก ฿${deduction.toLocaleString()}` : ""} · คำนวณจากยอดขายเดือน ${monthStr} × ขั้นบันได ${platformLabel(e.platform)} — เปิด/ปิดค่าคอม + ตั้งขั้นบันไดได้ที่เมนู "จัดการพนักงาน" / "เงินเดือน &amp; ค่าคอม"</p>`;
+
+    // ----- บททดสอบ MC -----
+    let certHtml;
+    if(data.quizLevels.length === 0){
+      certHtml = `<p class="meta">ยังไม่มีระดับบททดสอบในระบบ</p>`;
+    } else {
+      const rows = data.quizLevels.map(l => {
+        const cert = getCertification(empId, l.id);
+        const chip = !cert
+          ? `<span class="chip neutral">ยังไม่ทำ</span>`
+          : (cert.passed
+              ? `<span class="chip full">ผ่าน ${cert.scorePercent}%</span>`
+              : `<span class="chip part">ไม่ผ่าน ${cert.scorePercent}%</span>`);
+        return `<tr><td>${l.name}</td><td>${chip}</td></tr>`;
+      }).join("");
+      certHtml = `<table><thead><tr><th>ระดับ</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    return `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+        <button class="btn ghost sm" onclick="renderPage('hr-profiles')">← กลับ</button>
+        <h2 style="margin:0;font-size:22px;">${e.name}</h2>
+        <span class="chip ${e.platform}">${platformLabel(e.platform)}</span>
+        <span class="chip ${e.employmentType === "full-time" ? "full" : "part"}">${e.employmentType === "full-time" ? "ประจำ" : "พาร์ทไทม์"}</span>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">💰 ยอดขาย</h3>
+        <div class="grid cols-3">
+          <div><div class="stat-label">ยอดขายเดือนนี้ (${monthStr})</div><div class="stat-value">฿${totalMonth.toLocaleString()}</div></div>
+          <div><div class="stat-label">ออเดอร์เดือนนี้</div><div class="stat-value">${monthOrders.length.toLocaleString()}</div></div>
+          <div><div class="stat-label">ยอดขายสะสมทั้งหมด</div><div class="stat-value">฿${totalAll.toLocaleString()}</div></div>
+        </div>
+        <p class="meta" style="margin-top:14px;">ช่องทาง ${platformLabel(e.platform)} · ออเดอร์สะสมทั้งหมด ${empOrders.length.toLocaleString()} รายการ</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">🎥 รอบไลฟ์ &amp; การเข้างาน</h3>
+        <div class="grid cols-3">
+          <div><div class="stat-label">รอบไลฟ์ทั้งหมด</div><div class="stat-value">${empSessions.length}</div></div>
+          <div><div class="stat-label">จบแล้ว</div><div class="stat-value" style="color:var(--success);">${doneCount}</div></div>
+          <div><div class="stat-label">ขาด (นัดแล้วไม่เช็คอิน)</div><div class="stat-value" style="color:var(--danger);">${missedAll}</div></div>
+        </div>
+        <p class="meta" style="margin-top:12px;">รอไลฟ์ (นัดหมายในอนาคต) ${upcomingCount} รอบ</p>
+        <div class="stat-label" style="margin-top:16px;margin-bottom:6px;">รอบล่าสุด</div>
+        ${recentSessionsHtml(empSessions, false)}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">🧮 เงินเดือน &amp; ค่าคอม</h3>
+        ${payrollHtml}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">🎓 บททดสอบ MC</h3>
+        ${certHtml}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">🪪 ข้อมูลส่วนตัว &amp; บัญชี</h3>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          ${e.idCardPhoto
+            ? `<img src="${e.idCardPhoto}" style="width:180px;height:112px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+            : `<div class="meta" style="color:var(--danger);width:180px;">ยังไม่มีรูปบัตรประชาชน</div>`}
+          <div class="meta" style="line-height:1.9;">
+            ที่อยู่จัดส่ง: ${e.address || "-"}<br>
+            เลขบัตรประชาชน: ${e.idCardNumber || "-"}<br>
+            ธนาคาร: ${e.bankName || "-"}<br>
+            เลขบัญชี: ${e.bankAccountNumber || "-"}<br>
+            ชื่อบัญชี: ${e.bankAccountName || "-"}
+          </div>
+        </div>
+      </div>`;
   }
 
   function toggleEmpFields(){
@@ -888,6 +1025,7 @@
       document.getElementById("emp-platform").value = e.platform === "both" ? "tiktok" : e.platform;
       document.getElementById("emp-employment").value = e.employmentType || "full-time";
       document.getElementById("emp-salary").value = e.baseSalary || "";
+      document.getElementById("emp-commission").value = e.hasCommission ? "yes" : "no";
       document.getElementById("emp-payment-freq").value = e.paymentFrequency || "daily";
       document.getElementById("emp-idcard").value = e.idCardNumber || "";
       document.getElementById("emp-bank-name").value = e.bankName || "";
@@ -904,6 +1042,7 @@
       document.getElementById("emp-platform").value = "tiktok";
       document.getElementById("emp-employment").value = "full-time";
       document.getElementById("emp-salary").value = "";
+      document.getElementById("emp-commission").value = "no";
       document.getElementById("emp-payment-freq").value = "daily";
       document.getElementById("emp-idcard").value = "";
       document.getElementById("emp-bank-name").value = "";
@@ -949,6 +1088,7 @@
     const platform = role === "owner" ? "both" : document.getElementById("emp-platform").value;
     const baseSalary = role === "owner" ? null :
       (employmentType === "full-time" ? Number(document.getElementById("emp-salary").value) || 0 : null);
+    const hasCommission = role === "owner" ? false : (document.getElementById("emp-commission").value === "yes");
     const paymentFrequency = role === "owner" ? null :
       (employmentType === "part-time" ? document.getElementById("emp-payment-freq").value : null);
     const idCardNumber = role === "owner" ? null : (document.getElementById("emp-idcard").value.trim() || null);
@@ -963,7 +1103,7 @@
       p_role: role, p_platform: platform, p_employment_type: employmentType, p_base_salary: baseSalary,
       p_id_card_number: idCardNumber, p_bank_name: bankName, p_bank_account_number: bankAccountNumber,
       p_bank_account_name: bankAccountName, p_payment_frequency: paymentFrequency, p_id_card_photo: idCardPhoto,
-      p_notes: notes
+      p_notes: notes, p_has_commission: hasCommission
     });
     if(error){ showToast("บันทึกไม่สำเร็จ: " + error.message, "error"); return; }
 
@@ -2189,9 +2329,10 @@
     renderPage(currentPage);
   }
 
-  // ===== payroll (เฉพาะพนักงานประจำ) =====
-  function findMatchingTier(totalSales){
-    const active = data.commissionTiers.filter(t => t.minSales !== null && t.minSales !== undefined);
+  // ===== payroll =====
+  // หาขั้นบันไดที่ตรงกับยอดขาย เฉพาะตารางของช่องทางที่ระบุ (tiktok/shopee แยกกัน)
+  function findMatchingTier(platform, totalSales){
+    const active = data.commissionTiers.filter(t => t.platform === platform && t.minSales !== null && t.minSales !== undefined);
     const eligible = active.filter(t => totalSales >= t.minSales && (t.maxSales === null || t.maxSales === undefined || totalSales <= t.maxSales));
     if(eligible.length === 0) return null;
     return eligible.reduce((best,t) => (best === null || t.minSales > best.minSales) ? t : best, null);
@@ -2213,31 +2354,41 @@
     }).length;
   }
 
-  function renderPayroll(){
-    const fullTimeEmployees = data.employees.filter(e => e.employmentType === "full-time");
-    const tiersRows = data.commissionTiers.map((t,i) => `
+  function tierTableHtml(platform, label){
+    const rows = data.commissionTiers.filter(t => t.platform === platform).map((t,i) => `
       <tr>
         <td>ขั้น ${i+1}</td>
-        <td><input type="number" id="tier-min-${t.id}" value="${t.minSales === null ? "" : t.minSales}" placeholder="ว่าง = ยังไม่เปิดใช้"></td>
-        <td><input type="number" id="tier-max-${t.id}" value="${t.maxSales === null ? "" : t.maxSales}" placeholder="ว่าง = ไม่มีเพดาน"></td>
+        <td><input type="number" id="tier-min-${t.id}" value="${t.minSales === null || t.minSales === undefined ? "" : t.minSales}" placeholder="ว่าง = ยังไม่เปิดใช้"></td>
+        <td><input type="number" id="tier-max-${t.id}" value="${t.maxSales === null || t.maxSales === undefined ? "" : t.maxSales}" placeholder="ว่าง = ไม่มีเพดาน"></td>
         <td><input type="number" id="tier-rate-${t.id}" value="${t.ratePercent}"></td>
       </tr>`).join("");
-    const employeeOptions = fullTimeEmployees.map(e => `<option value="${e.id}">${e.name}</option>`).join("");
+    return `
+      <div class="card">
+        <h3 style="margin-top:0;"><span class="chip ${platform}">${label}</span> ขั้นบันไดค่าคอม</h3>
+        <p class="meta" style="margin-top:2px;margin-bottom:14px;">ขั้นไหนเว้นช่อง "ยอดขายขั้นต่ำ" = ยังไม่เปิดใช้ ระบบข้ามขั้นนั้น${platform === 'shopee' ? ' · เว้นว่างทุกขั้น = ' + label + ' ไม่มีค่าคอม' : ''}</p>
+        <table>
+          <thead><tr><th></th><th>ยอดขายขั้นต่ำ</th><th>ยอดขายสูงสุด</th><th>% ค่าคอม</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="4"><span class="meta">ยังไม่มีขั้นบันได</span></td></tr>`}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function renderPayroll(){
+    // คำนวณให้: พนักงานประจำ (มีเงินเดือน) หรือใครก็ตามที่เปิดสวิตช์ "มีค่าคอม"
+    const payableEmployees = data.employees.filter(e => e.role === "staff" && (e.employmentType === "full-time" || e.hasCommission));
+    const employeeOptions = payableEmployees.map(e => `<option value="${e.id}">${e.name} (${platformLabel(e.platform)})</option>`).join("");
     const currentMonth = new Date().toISOString().slice(0,7);
 
     return `
+      ${tierTableHtml('tiktok', 'TikTok')}
+      ${tierTableHtml('shopee', 'Shopee')}
       <div class="card">
-        <h3 style="margin-top:0;">ตารางค่าคอมมิชชั่นแบบขั้นบันได</h3>
-        <p class="meta" style="margin-top:-8px;margin-bottom:14px;">ขั้นไหนเว้นว่างช่อง "ยอดขายขั้นต่ำ" = ยังไม่เปิดใช้งาน ระบบจะข้ามขั้นนั้นเสมอ</p>
-        <table>
-          <thead><tr><th></th><th>ยอดขายขั้นต่ำ</th><th>ยอดขายสูงสุด</th><th>% ค่าคอม</th></tr></thead>
-          <tbody>${tiersRows}</tbody>
-        </table>
-        <button class="btn" style="margin-top:14px;" onclick="saveCommissionTiers()">บันทึกตารางค่าคอม</button>
+        <button class="btn" onclick="saveCommissionTiers()">บันทึกตารางค่าคอมทั้ง 2 ช่องทาง</button>
+        <p class="meta" style="margin-top:10px;">ค่าคอมคิดเฉพาะคนที่เปิดสวิตช์ <b>"มีค่าคอม"</b> ในหน้า "จัดการพนักงาน" · คิดจากยอดขายเดือนนั้น × ขั้นบันไดของ<b>ช่องทางคนนั้น</b> (TikTok ใช้ตาราง TikTok, Shopee ใช้ตาราง Shopee)</p>
       </div>
       <div class="card">
         <h3 style="margin-top:0;">คำนวณเงินเดือน & ค่าคอม</h3>
-        ${fullTimeEmployees.length === 0 ? `<p class="meta">ยังไม่มีพนักงานประจำในระบบ</p>` : `
+        ${payableEmployees.length === 0 ? `<p class="meta">ยังไม่มีพนักงานประจำ หรือคนที่เปิดค่าคอมในระบบ</p>` : `
         <div class="field"><label>เดือน</label><input type="month" id="payroll-month" value="${currentMonth}"></div>
         <div class="field"><label>พนักงาน</label><select id="payroll-employee">${employeeOptions}</select></div>
         <button class="btn" onclick="calculatePayroll()">คำนวณ</button>
@@ -2269,24 +2420,28 @@
     const monthStr = document.getElementById("payroll-month").value;
     if(!monthStr){ showToast("เลือกเดือนก่อน", "error"); return; }
     const emp = getEmployeeById(employeeId);
+    const isFull = emp.employmentType === "full-time";
     const totalSales = monthlySales(employeeId, monthStr);
-    const tier = findMatchingTier(totalSales);
-    const commission = tier ? totalSales * tier.ratePercent / 100 : 0;
-    const absentDays = countAbsentDays(employeeId, monthStr);
-    const deduction = Math.round((emp.baseSalary / 30) * absentDays);
-    const net = emp.baseSalary + commission - deduction;
+    const tier = emp.hasCommission ? findMatchingTier(emp.platform, totalSales) : null;
+    const commission = emp.hasCommission ? totalSales * (tier ? tier.ratePercent : 0) / 100 : 0;
+    const base = emp.baseSalary || 0;
+    const absentDays = isFull ? countAbsentDays(employeeId, monthStr) : 0;
+    const deduction = Math.round((base / 30) * absentDays);
+    const net = base + commission - deduction;
+    const rateText = !emp.hasCommission ? "ไม่มีค่าคอม (ปิดสวิตช์)"
+      : (tier ? tier.ratePercent + "% (ขั้น " + platformLabel(emp.platform) + ")" : "ยอดยังไม่ถึงขั้น/ยังไม่ตั้งตาราง");
     document.getElementById("payroll-result").innerHTML = `
       <div class="grid cols-3">
         <div><div class="stat-label">ยอดขายรวมเดือนนี้</div><div class="stat-value">฿${totalSales.toLocaleString()}</div></div>
-        <div><div class="stat-label">ขั้นค่าคอมที่ตรง</div><div class="stat-value" style="font-size:16px;">${tier ? tier.ratePercent + "%" : "ไม่พบขั้นที่ตรง"}</div></div>
-        <div><div class="stat-label">ค่าคอม</div><div class="stat-value">฿${commission.toLocaleString()}</div></div>
+        <div><div class="stat-label">ขั้นค่าคอมที่ตรง</div><div class="stat-value" style="font-size:16px;">${rateText}</div></div>
+        <div><div class="stat-label">ค่าคอม</div><div class="stat-value">฿${commission.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
       </div>
       <div class="grid cols-3" style="margin-top:16px;">
-        <div><div class="stat-label">วันขาด</div><div class="stat-value">${absentDays} วัน</div></div>
-        <div><div class="stat-label">เงินหัก</div><div class="stat-value" style="color:var(--danger);">-฿${deduction.toLocaleString()}</div></div>
-        <div><div class="stat-label">เงินเดือนสุทธิ</div><div class="stat-value">฿${net.toLocaleString()}</div></div>
+        <div><div class="stat-label">เงินเดือนฐาน</div><div class="stat-value">${isFull ? "฿" + base.toLocaleString() : "<span style='font-size:15px;color:var(--text-sub)'>พาร์ทไทม์ (จ่ายรายวันแยก)</span>"}</div></div>
+        <div><div class="stat-label">วันขาด / เงินหัก</div><div class="stat-value" style="color:var(--danger);">${absentDays} วัน · -฿${deduction.toLocaleString()}</div></div>
+        <div><div class="stat-label">${isFull ? "เงินเดือนสุทธิ" : "ค่าคอมสุทธิ"}</div><div class="stat-value">฿${net.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
       </div>
-      <div class="meta" style="margin-top:14px;">เงินเดือนฐาน ฿${emp.baseSalary.toLocaleString()} + ค่าคอม ฿${commission.toLocaleString()} − เงินหัก ฿${deduction.toLocaleString()} = สุทธิ ฿${net.toLocaleString()}</div>
+      <div class="meta" style="margin-top:14px;">${isFull ? `เงินเดือนฐาน ฿${base.toLocaleString()} + ` : ""}ค่าคอม ฿${commission.toLocaleString(undefined,{maximumFractionDigits:0})}${isFull ? ` − เงินหัก ฿${deduction.toLocaleString()}` : ""} = ${isFull ? "สุทธิ" : "ค่าคอมสุทธิ"} ฿${net.toLocaleString(undefined,{maximumFractionDigits:0})} · คิดจากยอดขายเดือน ${monthStr} × ขั้นบันไดค่าคอม ${platformLabel(emp.platform)}</div>
       <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:14px;">
         <div class="stat-label" style="margin-bottom:8px;">ข้อมูลสำหรับทำจ่าย</div>
         <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
