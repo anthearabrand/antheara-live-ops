@@ -788,6 +788,12 @@
             <div class="field"><button class="btn" onclick="applyDashboardRange()">ใช้ช่วงนี้</button></div>
           </div>
           <div id="dashboard-range-result">${renderDashboardRangeResult(dashboardRangeStart, dashboardRangeEnd)}</div>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">💾 สำรองข้อมูล</h3>
+          <p class="meta" style="margin-top:-4px;">ดาวน์โหลดข้อมูลทั้งระบบเป็นไฟล์ CSV เปิดด้วย Excel ได้ — เก็บไว้เผื่อวันที่ระบบมีปัญหา <b>แนะนำกดสิ้นเดือนก่อนคิดเงินเดือนทุกครั้ง</b></p>
+          <button class="btn" style="margin-top:12px;" onclick="downloadBackup()">⬇ ดาวน์โหลดข้อมูลทั้งหมด</button>
+          <p class="meta" style="margin-top:10px;font-size:11.5px;">ในไฟล์มี: พนักงาน · รอบไลฟ์ (เวลาเช็คอิน/เข้าสาย/ไลฟ์ครบไหม) · ออเดอร์ยอดขายทุกรายการ · สินค้า/สต๊อก · ขั้นบันไดค่าคอม<br>ไม่รวมรูปภาพและรหัส PIN (รูปยังอยู่ในระบบ · ไม่ใส่รหัสลงไฟล์เพื่อความปลอดภัย)</p>
         </div>`;
     }
 
@@ -903,6 +909,7 @@
     const today = new Date(); today.setHours(0,0,0,0);
     const missedAll = empSessions.filter(s => s.status === "นัดหมาย" && new Date(s.date + "T00:00:00") < today).length;
     const upcomingCount = empSessions.filter(s => s.status === "นัดหมาย" && new Date(s.date + "T00:00:00") >= today).length;
+    const disc = disciplineStats(empSessions);
 
     // ----- เงินเดือน & ค่าคอม -----
     const isFull = e.employmentType === "full-time";
@@ -970,6 +977,12 @@
           <div><div class="stat-label">ขาด (นัดแล้วไม่เช็คอิน)</div><div class="stat-value" style="color:var(--danger);">${missedAll}</div></div>
         </div>
         <p class="meta" style="margin-top:12px;">รอไลฟ์ (นัดหมายในอนาคต) ${upcomingCount} รอบ</p>
+        <div class="grid cols-3" style="margin-top:16px;">
+          <div><div class="stat-label">เข้าไลฟ์สาย</div><div class="stat-value" style="color:${disc.lateCount ? "var(--danger)" : "var(--text)"};">${disc.lateCount} ครั้ง</div></div>
+          <div><div class="stat-label">รวมเวลาที่สาย</div><div class="stat-value" style="font-size:19px;">${disc.lateTotalMin ? formatMinutes(disc.lateTotalMin) : "-"}</div></div>
+          <div><div class="stat-label">ไลฟ์ไม่ครบเวลา</div><div class="stat-value" style="color:${disc.shortCount ? "var(--danger)" : "var(--text)"};">${disc.shortCount} ครั้ง</div></div>
+        </div>
+        <p class="meta" style="margin-top:10px;">นับจากรอบที่เช็คอินแล้วทั้งหมด · ผ่อนผันเข้าสายไม่เกิน ${LATE_GRACE_MIN} นาที</p>
         <div class="stat-label" style="margin-top:16px;margin-bottom:6px;">รอบล่าสุด</div>
         ${recentSessionsHtml(empSessions, false)}
       </div>
@@ -1636,6 +1649,7 @@
   }
   function formatMinutes(totalMin){
     const hours = Math.floor(totalMin/60), mins = totalMin % 60;
+    if(hours === 0) return `${mins} นาที`;
     return mins === 0 ? `${hours} ชั่วโมง` : `${hours} ชม. ${mins} นาที`;
   }
   function sessionDurationLabel(s){
@@ -1653,6 +1667,117 @@
     }
     return sessionDurationLabel(s);
   }
+  // ===== เข้าไลฟ์สาย: เทียบเวลาเช็คอินจริง (check_in_time, timestamptz) กับเวลานัด (date + start_time เวลาไทย)
+  // ผ่อนผัน LATE_GRACE_MIN นาที ก่อนนับว่า "สาย" (กันเคสสายแค่ 1-2 นาที)
+  const LATE_GRACE_MIN = 5;
+  function lateMinutes(s){
+    if(!s || !s.checkInTime || !s.date || !s.startTime) return null;
+    const hhmm = String(s.startTime).slice(0,5);
+    const scheduled = new Date(s.date + "T" + hhmm + ":00");
+    const actual = new Date(s.checkInTime);
+    if(isNaN(scheduled.getTime()) || isNaN(actual.getTime())) return null;
+    return Math.round((actual - scheduled) / 60000);
+  }
+  function lateDisplay(s){
+    const late = lateMinutes(s);
+    if(late === null) return "";
+    if(late > LATE_GRACE_MIN) return ` <span class="status-chip live">⏰ เข้าสาย ${formatMinutes(late)}</span>`;
+    return ` <span class="status-chip done">✅ เข้าตรงเวลา</span>`;
+  }
+  // สรุปวินัยของพนักงานคนหนึ่งจากรอบไลฟ์ที่เช็คอินแล้ว
+  function disciplineStats(sessions){
+    let lateCount = 0, lateTotalMin = 0, shortCount = 0;
+    sessions.forEach(s => {
+      const late = lateMinutes(s);
+      if(late !== null && late > LATE_GRACE_MIN){ lateCount++; lateTotalMin += late; }
+      if(s.status === "จบแล้ว" && s.checkInTime && s.actualEndTime){
+        const actualMin = Math.round((new Date(s.actualEndTime) - new Date(s.checkInTime)) / 60000);
+        if(actualMin < durationMinutesFromRange(s.startTime, s.endTime)) shortCount++;
+      }
+    });
+    return { lateCount, lateTotalMin, shortCount };
+  }
+
+  // ===== สำรองข้อมูล (เจ้าของเท่านั้น) — ดาวน์โหลดทุกตารางเป็น CSV ไฟล์เดียว เปิดด้วย Excel ได้
+  // ไม่ใส่รูปภาพ (base64 ใหญ่มาก) และไม่ใส่รหัส PIN (เป็นข้อมูลความปลอดภัย)
+  function csvEscape(v){
+    if(v === null || v === undefined) return "";
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function csvBlock(title, header, rows){
+    const lines = ["=== " + title + " ===", header.map(csvEscape).join(",")];
+    rows.forEach(r => lines.push(r.map(csvEscape).join(",")));
+    lines.push("");
+    return lines.join("\r\n");
+  }
+  function fmtDateTime(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return "";
+    const p = n => String(n).padStart(2,"0");
+    return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function downloadBackup(){
+    if(!currentEmployee || currentEmployee.role !== "owner"){ showToast("เฉพาะเจ้าของเท่านั้น", "error"); return; }
+    const empName = id => { const e = getEmployeeById(id); return e ? e.name : "-"; };
+    const blocks = [];
+
+    blocks.push(csvBlock("พนักงาน",
+      ["ชื่อ","บทบาท","ช่องทาง","ประเภทงาน","เงินเดือนฐาน","มีค่าคอม","เลขบัตรประชาชน","ธนาคาร","เลขบัญชี","ชื่อบัญชี","ที่อยู่","โน้ตเจ้าของ"],
+      data.employees.map(e => [
+        e.name,
+        e.role === "owner" ? "เจ้าของ" : "พนักงาน",
+        e.role === "owner" ? "-" : platformLabel(e.platform),
+        e.employmentType === "full-time" ? "ประจำ" : (e.employmentType === "part-time" ? "พาร์ทไทม์" : "-"),
+        e.baseSalary || "", e.hasCommission ? "มี" : "ไม่มี",
+        e.idCardNumber || "", e.bankName || "", e.bankAccountNumber || "", e.bankAccountName || "",
+        e.address || "", e.notes || ""
+      ])));
+
+    blocks.push(csvBlock("รอบไลฟ์",
+      ["วันที่","ช่องทาง","พนักงาน","เวลานัดเริ่ม","เวลานัดจบ","สถานะ","เช็คอินจริง","เข้าสาย (นาที)","ปิดไลฟ์จริง","ไลฟ์จริง (นาที)","ครบเวลาไหม","มีรูปเช็คอิน","มีรูปแคปยอด"],
+      data.liveSessions.slice().sort((a,b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)).map(s => {
+        const late = lateMinutes(s);
+        let actualMin = "", full = "";
+        if(s.checkInTime && s.actualEndTime){
+          actualMin = Math.round((new Date(s.actualEndTime) - new Date(s.checkInTime)) / 60000);
+          full = actualMin < durationMinutesFromRange(s.startTime, s.endTime) ? "ไม่ครบ" : "ครบ";
+        }
+        return [s.date, platformLabel(s.platform), empName(s.employeeId), s.startTime, s.endTime, s.status,
+          fmtDateTime(s.checkInTime), late === null ? "" : late, fmtDateTime(s.actualEndTime), actualMin, full,
+          s.checkInPhoto ? "มี" : "ไม่มี", s.salesProofPhoto ? "มี" : "ไม่มี"];
+      })));
+
+    blocks.push(csvBlock("ออเดอร์ (ยอดขาย)",
+      ["วันเวลา","พนักงาน","ช่องทาง","สินค้า","จำนวน","ราคา/หน่วย","ยอดรวม","ลูกค้า","รอบไลฟ์ (id)"],
+      data.orders.slice().sort((a,b) => String(a.timestamp).localeCompare(String(b.timestamp))).map(o => [
+        fmtDateTime(o.timestamp), empName(o.employeeId), platformLabel(o.platform),
+        o.productName || "(ยอดรวมด่วน)", o.qty || "", o.pricePerUnit || "", o.total,
+        o.customerName || "", o.liveSessionId || ""])));
+
+    blocks.push(csvBlock("สินค้า / สต๊อก",
+      ["ชื่อสินค้า","ราคา","คงเหลือ"],
+      data.products.map(p => [p.name, p.price, p.stockQty])));
+
+    blocks.push(csvBlock("ขั้นบันไดค่าคอม",
+      ["ช่องทาง","ขั้น","ยอดขายขั้นต่ำ","ยอดขายสูงสุด","% ค่าคอม"],
+      data.commissionTiers.map(t => [platformLabel(t.platform), t.sortOrder,
+        (t.minSales === null || t.minSales === undefined) ? "" : t.minSales,
+        (t.maxSales === null || t.maxSales === undefined) ? "" : t.maxSales, t.ratePercent])));
+
+    const now = new Date().toISOString();
+    const text = "Antheara Live Ops — สำรองข้อมูล ณ " + fmtDateTime(now) + "\r\n\r\n" + blocks.join("\r\n");
+    const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "antheara-backup-" + fmtDateTime(now).replace(/[: ]/g, "-") + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("ดาวน์โหลดไฟล์สำรองแล้ว — เก็บไว้ใน Google Drive หรือในเครื่อง", "success");
+  }
+
   function findActiveSession(employeeId){
     return data.liveSessions.find(s => s.employeeId === employeeId && s.status === "กำลังไลฟ์");
   }
@@ -1812,7 +1937,7 @@
           </div>
           <span class="status-chip ${statusClass}">${s.status}</span>
         </div>
-        <div class="meta">${actualDurationDisplay(s)} · ${orderCount} ออเดอร์บันทึกแล้ว</div>
+        <div class="meta">${actualDurationDisplay(s)}${lateDisplay(s)} · ${orderCount} ออเดอร์บันทึกแล้ว</div>
         ${photosHtml}
         ${actionHtml ? `<div style="margin-top:12px;">${actionHtml}</div>` : ""}
       </div>`;
@@ -1928,6 +2053,14 @@
     if(error){ showToast("เช็คอินไม่สำเร็จ: " + error.message, "error"); return; }
     await refreshAllData();
     renderPage("live-schedule");
+    // แจ้งให้พนักงานรู้ตัวทันทีถ้าเช็คอินช้ากว่าเวลานัด
+    const s = data.liveSessions.find(x => x.id === sessionId);
+    const late = lateMinutes(s);
+    if(late !== null && late > LATE_GRACE_MIN){
+      showToast(`เช็คอินแล้ว — แต่เข้าไลฟ์สาย ${formatMinutes(late)} จากเวลานัด ${String(s.startTime).slice(0,5)} น.`, "warn");
+    } else {
+      showToast("เช็คอินเรียบร้อย เริ่มไลฟ์ได้เลย", "success");
+    }
   }
 
   function triggerEndLive(sessionId){
@@ -2206,7 +2339,7 @@
       <div class="card">
         <div class="toolbar">
           <h3 style="margin:0;">${s.date} · ${s.startTime}-${s.endTime} <span class="chip ${s.platform}">${platformLabel(s.platform)}</span></h3>
-          <span class="meta">${actualDurationDisplay(s)}${currentEmployee.role === "owner" ? " · " + (emp ? emp.name : "-") : ""}</span>
+          <span class="meta">${actualDurationDisplay(s)}${lateDisplay(s)}${currentEmployee.role === "owner" ? " · " + (emp ? emp.name : "-") : ""}</span>
         </div>
         <div class="grid cols-3">
           <div><div class="stat-label">ยอดขายรวม</div><div class="stat-value">฿${total.toLocaleString()}</div></div>
